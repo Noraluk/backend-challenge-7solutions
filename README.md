@@ -113,7 +113,7 @@ Design a real-world solution to search a large dataset of lottery tickets using 
 
 #### 1. Data Volume
 
-- Handle a dataset of **1 million** lottery tickets
+- Handle a dataset of **10 million** lottery tickets
 - Each ticket is a 6-digit number
 
 #### 2. Search Pattern
@@ -134,7 +134,7 @@ Design a real-world solution to search a large dataset of lottery tickets using 
 
 #### 4. Performance
 
-- Ensure the search is performant for `1M+` records
+- Ensure the search is performant for `10M+` records
 - Propose an efficient approach for querying and allocation
 
 #### 5. Real-World Design Proposal (No Code Required)
