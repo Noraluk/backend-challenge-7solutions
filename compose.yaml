@@ -1,0 +1,45 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    init: true
+    restart: unless-stopped
+    networks:
+      - backend
+
+  mongodb:
+    image: mongo:8.2
+    attach: false
+    command: ["mongod", "--quiet"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/27017"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    networks:
+      - backend
+
+volumes:
+  mongodb_data:
+
+networks:
+  backend:

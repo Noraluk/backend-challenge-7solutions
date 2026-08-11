@@ -1,0 +1,13 @@
+.git
+.env
+.env.*
+.idea
+.vscode
+bin
+dist
+tmp
+*.exe
+*.out
+*.pdf
+*.test
+.DS_Store
