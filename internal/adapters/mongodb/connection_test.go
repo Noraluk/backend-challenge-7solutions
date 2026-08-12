@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
@@ -44,5 +45,22 @@ func TestConnectFailsWhenContextIsCanceled(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "ping MongoDB") {
 		t.Errorf("Connect() error = %q, want ping context", err)
+	}
+}
+
+func TestConnectionUserRepositoryAndDisconnect(t *testing.T) {
+	client, err := mongo.Connect(options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		t.Fatalf("mongo.Connect() error = %v", err)
+	}
+	collection := client.Database("test").Collection("users")
+	connection := &Connection{client: client, users: collection}
+
+	repository := connection.UserRepository()
+	if repository == nil || repository.collection != collection {
+		t.Errorf("UserRepository() = %#v", repository)
+	}
+	if err := connection.Disconnect(context.Background()); err != nil {
+		t.Errorf("Disconnect() error = %v", err)
 	}
 }

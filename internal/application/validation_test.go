@@ -2,11 +2,15 @@ package application
 
 import (
 	"errors"
+	"strings"
 	"testing"
+
+	"github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
+	"github.com/go-playground/validator/v10"
 )
 
 func TestValidateRegistrationNormalizesInput(t *testing.T) {
-	input := RegistrationInput{
+	input := dto.RegistrationInput{
 		Name:     "  Ada Lovelace  ",
 		Email:    "  ADA+TEST@Example.COM  ",
 		Password: " password with spaces ",
@@ -40,7 +44,7 @@ func TestValidateRegistrationAcceptsValidEmails(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.email, func(t *testing.T) {
-			got, err := ValidateRegistration(RegistrationInput{
+			got, err := ValidateRegistration(dto.RegistrationInput{
 				Name:     "Valid User",
 				Email:    test.email,
 				Password: "password",
@@ -58,51 +62,51 @@ func TestValidateRegistrationAcceptsValidEmails(t *testing.T) {
 func TestValidateRegistrationRejectsInvalidInput(t *testing.T) {
 	tests := []struct {
 		name      string
-		input     RegistrationInput
+		input     dto.RegistrationInput
 		wantField string
 		wantCode  string
 	}{
 		{
 			name:      "missing name",
-			input:     RegistrationInput{Email: "user@example.com", Password: "password"},
+			input:     dto.RegistrationInput{Email: "user@example.com", Password: "password"},
 			wantField: "name",
-			wantCode:  ValidationRequired,
+			wantCode:  "required",
 		},
 		{
 			name:      "whitespace name",
-			input:     RegistrationInput{Name: "  ", Email: "user@example.com", Password: "password"},
+			input:     dto.RegistrationInput{Name: "  ", Email: "user@example.com", Password: "password"},
 			wantField: "name",
-			wantCode:  ValidationRequired,
+			wantCode:  "required",
 		},
 		{
 			name:      "missing email",
-			input:     RegistrationInput{Name: "Ada", Password: "password"},
+			input:     dto.RegistrationInput{Name: "Ada", Password: "password"},
 			wantField: "email",
-			wantCode:  ValidationRequired,
+			wantCode:  "required",
 		},
 		{
 			name:      "invalid email",
-			input:     RegistrationInput{Name: "Ada", Email: "not-an-email", Password: "password"},
+			input:     dto.RegistrationInput{Name: "Ada", Email: "not-an-email", Password: "password"},
 			wantField: "email",
-			wantCode:  ValidationInvalid,
+			wantCode:  "email",
 		},
 		{
 			name:      "email display name",
-			input:     RegistrationInput{Name: "Ada", Email: "Ada <ada@example.com>", Password: "password"},
+			input:     dto.RegistrationInput{Name: "Ada", Email: "Ada <ada@example.com>", Password: "password"},
 			wantField: "email",
-			wantCode:  ValidationInvalid,
+			wantCode:  "email",
 		},
 		{
 			name:      "missing password",
-			input:     RegistrationInput{Name: "Ada", Email: "ada@example.com"},
+			input:     dto.RegistrationInput{Name: "Ada", Email: "ada@example.com"},
 			wantField: "password",
-			wantCode:  ValidationRequired,
+			wantCode:  "required",
 		},
 		{
 			name:      "whitespace password",
-			input:     RegistrationInput{Name: "Ada", Email: "ada@example.com", Password: "  "},
+			input:     dto.RegistrationInput{Name: "Ada", Email: "ada@example.com", Password: "  "},
 			wantField: "password",
-			wantCode:  ValidationRequired,
+			wantCode:  "required",
 		},
 	}
 
@@ -138,11 +142,11 @@ func TestValidateUserUpdateRejectsInvalidInput(t *testing.T) {
 		wantField string
 		wantCode  string
 	}{
-		{name: "empty update", fields: map[string]string{}, wantField: "update", wantCode: ValidationEmpty},
-		{name: "unsupported field", fields: map[string]string{"password": "new-password"}, wantField: "password", wantCode: ValidationUnsupported},
-		{name: "empty name", fields: map[string]string{"name": "  "}, wantField: "name", wantCode: ValidationRequired},
-		{name: "empty email", fields: map[string]string{"email": "  "}, wantField: "email", wantCode: ValidationRequired},
-		{name: "invalid email", fields: map[string]string{"email": "invalid"}, wantField: "email", wantCode: ValidationInvalid},
+		{name: "empty update", fields: map[string]string{}, wantField: "fields", wantCode: "min"},
+		{name: "unsupported field", fields: map[string]string{"password": "new-password"}, wantField: "fields[password]", wantCode: "oneof"},
+		{name: "empty name", fields: map[string]string{"name": "  "}, wantField: "name", wantCode: "min"},
+		{name: "empty email", fields: map[string]string{"email": "  "}, wantField: "email", wantCode: "min"},
+		{name: "invalid email", fields: map[string]string{"email": "invalid"}, wantField: "email", wantCode: "email"},
 	}
 
 	for _, test := range tests {
@@ -159,18 +163,15 @@ func assertValidationError(t *testing.T, err error, field, code string) {
 	if err == nil {
 		t.Fatal("validation error = nil")
 	}
-	if !errors.Is(err, ErrValidation) {
-		t.Errorf("error = %v, want it to wrap ErrValidation", err)
+	var validationErrors validator.ValidationErrors
+	if !errors.As(err, &validationErrors) || len(validationErrors) == 0 {
+		t.Fatalf("error type = %T, want validator.ValidationErrors", err)
 	}
-
-	var validationError ValidationError
-	if !errors.As(err, &validationError) {
-		t.Fatalf("error type = %T, want ValidationError", err)
+	validationError := validationErrors[0]
+	if got := strings.ToLower(validationError.Field()); got != field {
+		t.Errorf("field = %q, want %q", got, field)
 	}
-	if validationError.Field != field {
-		t.Errorf("field = %q, want %q", validationError.Field, field)
-	}
-	if validationError.Code != code {
-		t.Errorf("code = %q, want %q", validationError.Code, code)
+	if validationError.Tag() != code {
+		t.Errorf("tag = %q, want %q", validationError.Tag(), code)
 	}
 }

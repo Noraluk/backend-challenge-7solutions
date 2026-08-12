@@ -32,6 +32,21 @@ func TestLoadConfig(t *testing.T) {
 	}
 }
 
+func TestLoadConfigReadsEnvironment(t *testing.T) {
+	for key, value := range validEnvironment() {
+		t.Setenv(key, value)
+	}
+	t.Setenv("HTTP_PORT", "8081")
+
+	config, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if config.HTTPPort != 8081 || config.MongoDatabase != "user_management" || config.JWTTTL != time.Hour {
+		t.Errorf("LoadConfig() = %#v", config)
+	}
+}
+
 func TestLoadConfigUsesDefaultHTTPPort(t *testing.T) {
 	config, err := loadConfig(mapLookup(validEnvironment()))
 	if err != nil {

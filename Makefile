@@ -3,11 +3,12 @@ SHELL := /bin/sh
 BINARY ?= bin/api
 COMPOSE ?= docker compose
 
-.PHONY: help fmt tidy test test-race vet build run check compose-config compose-up compose-down compose-reset
+.PHONY: help fmt mocks tidy test test-race vet build run check compose-config compose-up compose-down compose-reset
 
 help:
 	@printf '%s\n' \
 		'fmt             Format Go source files' \
+		'mocks           Generate gomock implementations with mockgen' \
 		'tidy            Synchronize Go module dependencies' \
 		'test            Run unit tests' \
 		'test-race       Run unit tests with the race detector' \
@@ -22,6 +23,16 @@ help:
 
 fmt:
 	gofmt -w $$(find cmd internal -type f -name '*.go')
+
+mocks:
+	mkdir -p internal/mocks
+	go tool mockgen -destination=internal/mocks/mock_user_repository.go -package=mocks -write_package_comment=false -write_source_comment=false github.com/Noraluk/backend-challenge-7solutions/internal/ports UserRepository
+	go tool mockgen -destination=internal/mocks/mock_password_hasher.go -package=mocks -write_package_comment=false -write_source_comment=false github.com/Noraluk/backend-challenge-7solutions/internal/ports PasswordHasher
+	go tool mockgen -destination=internal/mocks/mock_token_service.go -package=mocks -write_package_comment=false -write_source_comment=false github.com/Noraluk/backend-challenge-7solutions/internal/ports TokenService
+	go tool mockgen -destination=internal/mocks/mock_registration_usecase.go -package=mocks -write_package_comment=false -write_source_comment=false github.com/Noraluk/backend-challenge-7solutions/internal/ports RegistrationUseCase
+	go tool mockgen -destination=internal/mocks/mock_authentication_usecase.go -package=mocks -write_package_comment=false -write_source_comment=false github.com/Noraluk/backend-challenge-7solutions/internal/ports AuthenticationUseCase
+	go tool mockgen -source=internal/adapters/mongodb/user_repository.go -destination=internal/mocks/mock_user_collection.go -package=mocks -mock_names=userCollection=MockUserCollection -write_package_comment=false -write_source_comment=false
+	gofmt -w internal/mocks
 
 tidy:
 	go mod tidy

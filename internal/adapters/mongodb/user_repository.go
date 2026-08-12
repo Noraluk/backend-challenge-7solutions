@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
+	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/mongodb/model"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -27,14 +28,6 @@ type UserRepository struct {
 	collection userCollection
 }
 
-type userDocument struct {
-	ID           bson.ObjectID `bson:"_id"`
-	Name         string        `bson:"name"`
-	Email        string        `bson:"email"`
-	PasswordHash string        `bson:"password_hash"`
-	CreatedAt    time.Time     `bson:"created_at"`
-}
-
 var _ ports.UserRepository = (*UserRepository)(nil)
 
 func NewUserRepository(collection *mongo.Collection) *UserRepository {
@@ -42,7 +35,7 @@ func NewUserRepository(collection *mongo.Collection) *UserRepository {
 }
 
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
-	document, err := newUserDocument(user)
+	document, err := model.NewUserDocument(user)
 	if err != nil {
 		return domain.User{}, err
 	}
@@ -51,10 +44,10 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 		return domain.User{}, mapMongoError(err)
 	}
 
-	return document.domainUser(), nil
+	return document.DomainUser(), nil
 }
 
-func (r *UserRepository) GetByID(ctx context.Context, id domain.UserID) (domain.User, error) {
+func (r *UserRepository) GetByID(ctx context.Context, id string) (domain.User, error) {
 	objectID, err := parseUserID(id)
 	if err != nil {
 		return domain.User{}, err
@@ -80,20 +73,20 @@ func (r *UserRepository) List(ctx context.Context) ([]domain.User, error) {
 		return nil, err
 	}
 
-	var documents []userDocument
+	var documents []model.UserDocument
 	if err := cursor.All(ctx, &documents); err != nil {
 		return nil, err
 	}
 
 	users := make([]domain.User, len(documents))
 	for index, document := range documents {
-		users[index] = document.domainUser()
+		users[index] = document.DomainUser()
 	}
 
 	return users, nil
 }
 
-func (r *UserRepository) Update(ctx context.Context, id domain.UserID, update ports.UserUpdate) (domain.User, error) {
+func (r *UserRepository) Update(ctx context.Context, id string, update dto.UpdateUserInput) (domain.User, error) {
 	objectID, err := parseUserID(id)
 	if err != nil {
 		return domain.User{}, err
@@ -120,7 +113,7 @@ func (r *UserRepository) Update(ctx context.Context, id domain.UserID, update po
 	return decodeUser(result)
 }
 
-func (r *UserRepository) Delete(ctx context.Context, id domain.UserID) error {
+func (r *UserRepository) Delete(ctx context.Context, id string) error {
 	objectID, err := parseUserID(id)
 	if err != nil {
 		return err
@@ -141,45 +134,16 @@ func (r *UserRepository) Count(ctx context.Context) (int64, error) {
 	return r.collection.CountDocuments(ctx, bson.D{})
 }
 
-func newUserDocument(user domain.User) (userDocument, error) {
-	objectID := bson.NewObjectID()
-	if user.ID != "" {
-		var err error
-		objectID, err = parseUserID(user.ID)
-		if err != nil {
-			return userDocument{}, err
-		}
-	}
-
-	return userDocument{
-		ID:           objectID,
-		Name:         user.Name,
-		Email:        normalizeEmail(user.Email),
-		PasswordHash: user.PasswordHash,
-		CreatedAt:    user.CreatedAt,
-	}, nil
-}
-
-func (document userDocument) domainUser() domain.User {
-	return domain.User{
-		ID:           domain.UserID(document.ID.Hex()),
-		Name:         document.Name,
-		Email:        document.Email,
-		PasswordHash: document.PasswordHash,
-		CreatedAt:    document.CreatedAt,
-	}
-}
-
 func decodeUser(result *mongo.SingleResult) (domain.User, error) {
-	var document userDocument
+	var document model.UserDocument
 	if err := result.Decode(&document); err != nil {
 		return domain.User{}, mapMongoError(err)
 	}
 
-	return document.domainUser(), nil
+	return document.DomainUser(), nil
 }
 
-func parseUserID(id domain.UserID) (bson.ObjectID, error) {
+func parseUserID(id string) (bson.ObjectID, error) {
 	objectID, err := bson.ObjectIDFromHex(string(id))
 	if err != nil {
 		return bson.NilObjectID, fmt.Errorf("%w: %q", ports.ErrInvalidUserID, id)

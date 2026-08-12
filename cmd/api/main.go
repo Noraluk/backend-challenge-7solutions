@@ -7,8 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/httpapi"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/auth"
+	httpapi "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http"
+	httproutes "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/routes"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/mongodb"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/application"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/platform"
 )
 
@@ -30,10 +33,18 @@ func main() {
 			log.Printf("MongoDB shutdown error: %v", err)
 		}
 	}()
+	repository := database.UserRepository()
+	passwordHasher := auth.NewBcryptPasswordHasher()
+	tokenService := auth.NewJWTService(config.JWTSecret, time.Now)
+	registrationService := application.NewRegistrationService(repository, passwordHasher, time.Now)
+	authenticationService := application.NewAuthenticationService(repository, passwordHasher, tokenService, config.JWTTTL, time.Now)
 
 	address := fmt.Sprintf(":%d", config.HTTPPort)
 	log.Printf("API server listening on %s", address)
-	if err := http.ListenAndServe(address, httpapi.NewHandler()); err != nil {
+	handler := httpapi.NewHandler(
+		httproutes.NewAuthRoutes(registrationService, authenticationService),
+	)
+	if err := http.ListenAndServe(address, handler); err != nil {
 		log.Fatalf("API server failed: %v", err)
 	}
 }

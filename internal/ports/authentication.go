@@ -2,8 +2,6 @@ package ports
 
 import (
 	"time"
-
-	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 )
 
 type PasswordHasher interface {
@@ -12,7 +10,7 @@ type PasswordHasher interface {
 }
 
 type TokenClaims struct {
-	UserID    domain.UserID
+	UserID    string
 	ExpiresAt time.Time
 }
 
