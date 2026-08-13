@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/handlers"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/middleware"
 )
 
 type RouteGroup interface {
@@ -17,5 +19,5 @@ func NewHandler(groups ...RouteGroup) http.Handler {
 		group.Register(mux)
 	}
 
-	return mux
+	return middleware.LogRequests(slog.Default())(mux)
 }
