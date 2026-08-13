@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -59,6 +60,17 @@ func run() error {
 		}
 	}()
 	repository := database.UserRepository()
+	workerContext, stopWorker := context.WithCancel(context.Background())
+	workerStopped := make(chan struct{})
+	go func() {
+		application.RunUserCountWorker(workerContext, repository, slog.Default())
+		close(workerStopped)
+	}()
+	defer func() {
+		stopWorker()
+		<-workerStopped
+	}()
+
 	passwordHasher := auth.NewBcryptPasswordHasher()
 	tokenService := auth.NewJWTService(config.JWTSecret, time.Now)
 	registrationService := application.NewRegistrationService(repository, passwordHasher)
