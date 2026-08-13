@@ -4,11 +4,12 @@ BINARY ?= bin/api
 COMPOSE ?= docker compose
 BUF_VERSION ?= v1.65.0
 
-.PHONY: help fmt mocks proto proto-generate tidy test test-race vet build run check compose-config compose-up compose-down compose-reset
+.PHONY: help fmt fmt-check mocks proto proto-generate tidy test test-race vet build run check docker-up docker-down
 
 help:
 	@printf '%s\n' \
 		'fmt             Format Go source files' \
+		'fmt-check       Check Go source formatting without changing files' \
 		'mocks           Generate gomock implementations with mockgen' \
 		'proto           Validate Protobuf contracts' \
 		'proto-generate  Validate contracts and generate Go code' \
@@ -18,14 +19,15 @@ help:
 		'vet             Run Go static analysis' \
 		'build           Build the API binary' \
 		'run             Run the API locally' \
-		'check           Run tests, race detection, vet, and build' \
-		'compose-config  Validate Docker Compose configuration' \
-		'compose-up      Build and start the local stack' \
-		'compose-down    Stop the local stack and preserve data' \
-		'compose-reset   Stop the local stack and remove its data'
+		'check           Run format check, tests, race detection, vet, and build' \
+		'docker-up       Build and start the local stack in the background' \
+		'docker-down     Stop the local stack and preserve data'
 
 fmt:
 	gofmt -w $$(find cmd gen internal -type f -name '*.go')
+
+fmt-check:
+	@test -z "$$(gofmt -l $$(find cmd gen internal -type f -name '*.go'))"
 
 mocks:
 	mkdir -p internal/mocks
@@ -64,16 +66,10 @@ build:
 run:
 	go run ./cmd/api
 
-check: test test-race vet build
+check: fmt-check test test-race vet build
 
-compose-config:
-	$(COMPOSE) config --quiet
-
-compose-up:
+docker-up:
 	$(COMPOSE) up --build
 
-compose-down:
+docker-down:
 	$(COMPOSE) down
-
-compose-reset:
-	$(COMPOSE) down --volumes

@@ -230,7 +230,7 @@ docker compose logs -f api
 docker compose down
 ```
 
-`docker compose down` preserves MongoDB data. Use `make compose-reset` only when the local MongoDB volume should also be removed.
+`docker compose down` preserves MongoDB data. Run `docker compose down --volumes` only when the local MongoDB volume should also be removed.
 
 ## Start locally
 
@@ -419,6 +419,24 @@ grpcurl -plaintext -import-path proto -proto user/v1/user.proto \
 In Postman, create a gRPC request for `localhost:9090`, import `proto/user/v1/user.proto`, and add `authorization: Bearer <access_token>` under Metadata for `GetUser`.
 
 ## Verification
+
+The Makefile is a thin wrapper around the listed tools:
+
+| Make command | Purpose | Core raw command |
+| --- | --- | --- |
+| `make run` | Run the API locally | `go run ./cmd/api` |
+| `make fmt` | Format Go code | `gofmt -w <go-files>` |
+| `make fmt-check` | Check formatting without writing | `gofmt -l <go-files>` |
+| `make test` | Run unit tests | `go test ./...` |
+| `make test-race` | Run tests with race detection | `go test -race ./...` |
+| `make vet` | Run static analysis | `go vet ./...` |
+| `make check` | Run format check, tests, race detection, vet, and build | The commands above plus `go build ./cmd/api` |
+| `make docker-up` | Build and start Docker services in the background | `docker compose up -d --build` |
+| `make docker-down` | Stop Docker services and preserve data | `docker compose down` |
+| `make proto` | Lint and validate protobuf contracts | `go run github.com/bufbuild/buf/cmd/buf@v1.65.0 lint` and `build` |
+| `make proto-generate` | Validate and generate protobuf bindings | `go run github.com/bufbuild/buf/cmd/buf@v1.65.0 generate` |
+
+List all available commands with `make help`. Reviewer verification from the repository root is:
 
 ```sh
 make proto
