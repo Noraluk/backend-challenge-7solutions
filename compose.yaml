@@ -7,7 +7,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${HTTP_PORT:-8080}:8080"
+      - "${HTTP_PORT:-8080}:${HTTP_PORT:-8080}"
     volumes:
       - .:/app
       - go_modules:/go/pkg/mod
@@ -16,6 +16,12 @@ services:
       mongodb:
         condition: service_healthy
         restart: true
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/${HTTP_PORT:-8080}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     init: true
     restart: unless-stopped
     networks:
