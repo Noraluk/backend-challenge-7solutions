@@ -12,6 +12,7 @@ import (
 	applicationdto "github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/mocks"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/testutil"
 	"go.uber.org/mock/gomock"
 )
 
@@ -50,7 +51,7 @@ func TestUserHandlerGetUserError(t *testing.T) {
 
 	NewUserHandler(users).GetUser(response, request)
 
-	assertErrorResponse(t, response, http.StatusNotFound, "USER_NOT_FOUND")
+	testutil.AssertAPIError(t, response, http.StatusNotFound, "USER_NOT_FOUND")
 }
 
 func TestUserHandlerListUsers(t *testing.T) {
@@ -73,12 +74,13 @@ func TestUserHandlerListUsers(t *testing.T) {
 			response := httptest.NewRecorder()
 			NewUserHandler(users).ListUsers(response, httptest.NewRequest(http.MethodGet, "/users", nil))
 			if test.err != nil {
-				assertErrorResponse(t, response, test.wantStatus, "INTERNAL_ERROR")
+				testutil.AssertAPIError(t, response, test.wantStatus, "INTERNAL_ERROR")
 				return
 			}
 			if response.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d", response.Code, test.wantStatus)
 			}
+			testutil.AssertJSONContentType(t, response)
 			var got []applicationdto.UserResponse
 			if err := json.NewDecoder(response.Body).Decode(&got); err != nil {
 				t.Fatalf("decode response: %v", err)
@@ -121,6 +123,8 @@ func TestUserHandlerUpdateUserErrors(t *testing.T) {
 	}{
 		{name: "invalid request", body: `{"name":`, wantStatus: http.StatusBadRequest, wantCode: "INVALID_REQUEST"},
 		{name: "duplicate", body: `{"email":"ada@example.com"}`, usecaseErr: domain.ErrEmailAlreadyExists, wantStatus: http.StatusConflict, wantCode: "EMAIL_ALREADY_EXISTS"},
+		{name: "not found", body: `{"name":"Grace"}`, usecaseErr: domain.ErrUserNotFound, wantStatus: http.StatusNotFound, wantCode: "USER_NOT_FOUND"},
+		{name: "internal", body: `{"name":"Grace"}`, usecaseErr: errors.New("database failed"), wantStatus: http.StatusInternalServerError, wantCode: "INTERNAL_ERROR"},
 	}
 
 	for _, test := range tests {
@@ -134,7 +138,7 @@ func TestUserHandlerUpdateUserErrors(t *testing.T) {
 			request.SetPathValue("id", handlerUserID)
 			response := httptest.NewRecorder()
 			NewUserHandler(users).UpdateUser(response, request)
-			assertErrorResponse(t, response, test.wantStatus, test.wantCode)
+			testutil.AssertAPIError(t, response, test.wantStatus, test.wantCode)
 		})
 	}
 }
@@ -147,6 +151,7 @@ func TestUserHandlerDeleteUser(t *testing.T) {
 	}{
 		{name: "success", wantStatus: http.StatusNoContent},
 		{name: "not found", err: domain.ErrUserNotFound, wantStatus: http.StatusNotFound},
+		{name: "internal", err: errors.New("database failed"), wantStatus: http.StatusInternalServerError},
 	}
 
 	for _, test := range tests {
@@ -159,7 +164,11 @@ func TestUserHandlerDeleteUser(t *testing.T) {
 			response := httptest.NewRecorder()
 			NewUserHandler(users).DeleteUser(response, request)
 			if test.err != nil {
-				assertErrorResponse(t, response, test.wantStatus, "USER_NOT_FOUND")
+				wantCode := "INTERNAL_ERROR"
+				if errors.Is(test.err, domain.ErrUserNotFound) {
+					wantCode = "USER_NOT_FOUND"
+				}
+				testutil.AssertAPIError(t, response, test.wantStatus, wantCode)
 				return
 			}
 			if response.Code != test.wantStatus || response.Body.Len() != 0 {
@@ -174,6 +183,7 @@ func assertUserResponse(t *testing.T, response *httptest.ResponseRecorder, statu
 	if response.Code != status {
 		t.Fatalf("status = %d, want %d; body = %s", response.Code, status, response.Body)
 	}
+	testutil.AssertJSONContentType(t, response)
 	var got applicationdto.UserResponse
 	if err := json.NewDecoder(response.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)

@@ -10,6 +10,7 @@ import (
 
 	httpdto "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/dto"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/testutil"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -53,9 +54,7 @@ func TestWriteJSON(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Errorf("status = %d", response.Code)
 	}
-	if response.Header().Get("Content-Type") != "application/json" {
-		t.Errorf("Content-Type = %q", response.Header().Get("Content-Type"))
-	}
+	testutil.AssertJSONContentType(t, response)
 	if response.Body.String() != "{\"status\":\"created\"}\n" {
 		t.Errorf("body = %q", response.Body.String())
 	}

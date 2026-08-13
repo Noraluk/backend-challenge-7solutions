@@ -2,7 +2,9 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +30,7 @@ func TestUserServiceGetUser(t *testing.T) {
 	if result.ID != user.ID || result.Name != user.Name || result.Email != user.Email {
 		t.Errorf("GetUser() = %#v", result)
 	}
+	assertPasswordIsSanitized(t, result)
 }
 
 func TestUserServiceGetUserErrors(t *testing.T) {
@@ -94,6 +97,7 @@ func TestUserServiceListUsers(t *testing.T) {
 			if err != nil || len(results) != test.wantLen || results == nil {
 				t.Errorf("ListUsers() = %#v, %v", results, err)
 			}
+			assertPasswordIsSanitized(t, results)
 		})
 	}
 }
@@ -129,11 +133,13 @@ func TestUserServiceUpdateUser(t *testing.T) {
 			if err != nil || result.ID != validUserID {
 				t.Errorf("UpdateUser() = %#v, %v", result, err)
 			}
+			assertPasswordIsSanitized(t, result)
 		})
 	}
 }
 
 func TestUserServiceUpdateUserErrors(t *testing.T) {
+	repositoryError := errors.New("database failed")
 	tests := []struct {
 		name      string
 		id        string
@@ -148,6 +154,7 @@ func TestUserServiceUpdateUserErrors(t *testing.T) {
 		{name: "invalid email", id: validUserID, input: dto.UpdateUserInput{ID: validUserID, Email: stringPointer("invalid")}},
 		{name: "duplicate", id: validUserID, input: dto.UpdateUserInput{ID: validUserID, Email: stringPointer("grace@example.com")}, repoError: domain.ErrEmailAlreadyExists, want: domain.ErrEmailAlreadyExists},
 		{name: "not found", id: validUserID, input: dto.UpdateUserInput{ID: validUserID, Name: stringPointer("Grace")}, repoError: domain.ErrUserNotFound, want: domain.ErrUserNotFound},
+		{name: "repository", id: validUserID, input: dto.UpdateUserInput{ID: validUserID, Name: stringPointer("Grace")}, repoError: repositoryError, want: repositoryError},
 	}
 
 	for _, test := range tests {
@@ -213,4 +220,16 @@ func TestUserServiceDeleteUser(t *testing.T) {
 
 func stringPointer(value string) *string {
 	return &value
+}
+
+func assertPasswordIsSanitized(t *testing.T, value any) {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	response := strings.ToLower(string(encoded))
+	if strings.Contains(response, "password") || strings.Contains(response, "secret") {
+		t.Errorf("response exposes password data: %s", response)
+	}
 }

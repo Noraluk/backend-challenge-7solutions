@@ -14,6 +14,7 @@ import (
 	applicationdto "github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/mocks"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/testutil"
 	"go.uber.org/mock/gomock"
 )
 
@@ -40,6 +41,7 @@ func TestRegisterUser(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("status = %d; body = %s", response.Code, response.Body)
 	}
+	testutil.AssertJSONContentType(t, response)
 	if strings.Contains(response.Body.String(), "password") {
 		t.Errorf("response exposes password: %s", response.Body)
 	}
@@ -77,7 +79,7 @@ func TestRegisterUserErrors(t *testing.T) {
 			authHandler(NewAuthRoutes(handlers.NewAuthHandler(registration, nil))).ServeHTTP(response,
 				httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(test.body)),
 			)
-			assertAPIError(t, response, test.wantStatus, test.wantCode)
+			testutil.AssertAPIError(t, response, test.wantStatus, test.wantCode)
 		})
 	}
 }
@@ -98,6 +100,7 @@ func TestLogin(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d; body = %s", response.Code, response.Body)
 	}
+	testutil.AssertJSONContentType(t, response)
 	var body httpdto.LoginResponse
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -131,7 +134,7 @@ func TestLoginErrors(t *testing.T) {
 			authHandler(NewAuthRoutes(handlers.NewAuthHandler(nil, authentication))).ServeHTTP(response,
 				httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(test.body)),
 			)
-			assertAPIError(t, response, test.wantStatus, test.wantCode)
+			testutil.AssertAPIError(t, response, test.wantStatus, test.wantCode)
 		})
 	}
 }

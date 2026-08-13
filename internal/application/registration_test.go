@@ -51,6 +51,7 @@ func TestRegistrationServiceRegister(t *testing.T) {
 	if result.ID != "user-id" || result.Name != persisted.Name || result.Email != persisted.Email {
 		t.Errorf("result = %#v", result)
 	}
+	assertPasswordIsSanitized(t, result)
 }
 
 func TestRegistrationServiceRejectsValidationBeforeDependencies(t *testing.T) {

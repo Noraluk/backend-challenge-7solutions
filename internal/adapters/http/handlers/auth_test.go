@@ -13,6 +13,8 @@ import (
 	applicationdto "github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/mocks"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/testutil"
+	"github.com/go-playground/validator/v10"
 	"go.uber.org/mock/gomock"
 )
 
@@ -43,6 +45,7 @@ func TestAuthHandlerRegisterUser(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("status = %d; body = %s", response.Code, response.Body)
 	}
+	testutil.AssertJSONContentType(t, response)
 	var got applicationdto.UserResponse
 	if err := json.NewDecoder(response.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -53,6 +56,9 @@ func TestAuthHandlerRegisterUser(t *testing.T) {
 }
 
 func TestAuthHandlerRegisterUserErrors(t *testing.T) {
+	validationError := validator.New().Struct(struct {
+		Name string `validate:"required"`
+	}{})
 	tests := []struct {
 		name       string
 		body       string
@@ -61,6 +67,7 @@ func TestAuthHandlerRegisterUserErrors(t *testing.T) {
 		wantCode   string
 	}{
 		{name: "invalid request", body: `{"name":`, wantStatus: http.StatusBadRequest, wantCode: "INVALID_REQUEST"},
+		{name: "validation", body: `{"name":"","email":"ada@example.com","password":"password"}`, usecaseErr: validationError, wantStatus: http.StatusBadRequest, wantCode: "VALIDATION_ERROR"},
 		{name: "duplicate", body: `{"name":"Ada","email":"ada@example.com","password":"password"}`, usecaseErr: domain.ErrEmailAlreadyExists, wantStatus: http.StatusConflict, wantCode: "EMAIL_ALREADY_EXISTS"},
 		{name: "internal", body: `{"name":"Ada","email":"ada@example.com","password":"password"}`, usecaseErr: errors.New("database secret"), wantStatus: http.StatusInternalServerError, wantCode: "INTERNAL_ERROR"},
 	}
@@ -74,7 +81,7 @@ func TestAuthHandlerRegisterUserErrors(t *testing.T) {
 			}
 			response := httptest.NewRecorder()
 			NewAuthHandler(registration, nil).RegisterUser(response, httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(test.body)))
-			assertErrorResponse(t, response, test.wantStatus, test.wantCode)
+			testutil.AssertAPIError(t, response, test.wantStatus, test.wantCode)
 			if strings.Contains(response.Body.String(), "database secret") {
 				t.Errorf("response leaks internal error: %s", response.Body)
 			}
@@ -100,6 +107,7 @@ func TestAuthHandlerLogin(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d; body = %s", response.Code, response.Body)
 	}
+	testutil.AssertJSONContentType(t, response)
 	var got httpdto.LoginResponse
 	if err := json.NewDecoder(response.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -131,27 +139,10 @@ func TestAuthHandlerLoginErrors(t *testing.T) {
 			}
 			response := httptest.NewRecorder()
 			NewAuthHandler(nil, authentication).Login(response, httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(test.body)))
-			assertErrorResponse(t, response, test.wantStatus, test.wantCode)
+			testutil.AssertAPIError(t, response, test.wantStatus, test.wantCode)
 			if strings.Contains(response.Body.String(), "JWT secret") {
 				t.Errorf("response leaks internal error: %s", response.Body)
 			}
 		})
-	}
-}
-
-func assertErrorResponse(t *testing.T, response *httptest.ResponseRecorder, status int, code string) {
-	t.Helper()
-	if response.Code != status {
-		t.Fatalf("status = %d, want %d; body = %s", response.Code, status, response.Body)
-	}
-	if response.Header().Get("Content-Type") != "application/json" {
-		t.Errorf("Content-Type = %q", response.Header().Get("Content-Type"))
-	}
-	var body httpdto.ErrorResponse
-	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Code != code || body.Message == "" {
-		t.Errorf("error response = %#v", body)
 	}
 }

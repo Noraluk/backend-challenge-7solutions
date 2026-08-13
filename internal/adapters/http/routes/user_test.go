@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	httpdto "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/dto"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/handlers"
 	applicationdto "github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/mocks"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/testutil"
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/mock/gomock"
 )
@@ -49,6 +49,7 @@ func TestUserRoutesGet(t *testing.T) {
 	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "password") {
 		t.Fatalf("response = %d %s", response.Code, response.Body)
 	}
+	testutil.AssertJSONContentType(t, response)
 	var body applicationdto.UserResponse
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil || body.ID != validUserID {
 		t.Errorf("response = %#v, %v", body, err)
@@ -73,6 +74,10 @@ func TestUserRoutesList(t *testing.T) {
 			userHandler(t, users, tokens).ServeHTTP(response, authenticatedRequest(http.MethodGet, "/users", ""))
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d", response.Code)
+			}
+			testutil.AssertJSONContentType(t, response)
+			if strings.Contains(strings.ToLower(response.Body.String()), "password") {
+				t.Errorf("response exposes password data: %s", response.Body)
 			}
 			var body []applicationdto.UserResponse
 			if err := json.NewDecoder(response.Body).Decode(&body); err != nil || len(body) != len(test.results) || body == nil {
@@ -101,6 +106,10 @@ func TestUserRoutesUpdate(t *testing.T) {
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Grace") {
 		t.Errorf("response = %d %s", response.Code, response.Body)
 	}
+	testutil.AssertJSONContentType(t, response)
+	if strings.Contains(strings.ToLower(response.Body.String()), "password") {
+		t.Errorf("response exposes password data: %s", response.Body)
+	}
 }
 
 func TestUserRoutesDelete(t *testing.T) {
@@ -123,7 +132,7 @@ func TestUserRoutesRequireAuthentication(t *testing.T) {
 	NewUserRoutes(handlers.NewUserHandler(users), tokens).Register(mux)
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/users", nil))
-	assertAPIError(t, response, http.StatusUnauthorized, "UNAUTHORIZED")
+	testutil.AssertAPIError(t, response, http.StatusUnauthorized, "UNAUTHORIZED")
 }
 
 func TestUserRouteErrors(t *testing.T) {
@@ -167,24 +176,10 @@ func TestUserRouteErrors(t *testing.T) {
 			}
 			response := httptest.NewRecorder()
 			userHandler(t, users, tokens).ServeHTTP(response, authenticatedRequest(test.method, test.target, test.body))
-			assertAPIError(t, response, test.wantStatus, test.wantCode)
+			testutil.AssertAPIError(t, response, test.wantStatus, test.wantCode)
 			if strings.Contains(response.Body.String(), "database URI") {
 				t.Errorf("response leaks internal error: %s", response.Body)
 			}
 		})
-	}
-}
-
-func assertAPIError(t *testing.T, response *httptest.ResponseRecorder, status int, code string) {
-	t.Helper()
-	if response.Code != status {
-		t.Fatalf("status = %d, want %d; body = %s", response.Code, status, response.Body)
-	}
-	var body httpdto.ErrorResponse
-	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if body.Code != code || body.Message == "" {
-		t.Errorf("error response = %#v", body)
 	}
 }
