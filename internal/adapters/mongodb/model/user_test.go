@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
-	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -34,7 +33,7 @@ func TestNewUserDocumentAndDomainUser(t *testing.T) {
 }
 
 func TestNewUserDocumentRejectsInvalidID(t *testing.T) {
-	if _, err := NewUserDocument(domain.User{ID: "invalid"}); !errors.Is(err, ports.ErrInvalidUserID) {
+	if _, err := NewUserDocument(domain.User{ID: "invalid"}); !errors.Is(err, domain.ErrInvalidUserID) {
 		t.Errorf("NewUserDocument() error = %v, want ErrInvalidUserID", err)
 	}
 }

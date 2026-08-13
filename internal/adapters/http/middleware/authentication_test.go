@@ -1,10 +1,11 @@
-package httpapi
+package middleware
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/mocks"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 	"go.uber.org/mock/gomock"
@@ -22,8 +23,8 @@ func TestRequireAuthentication(t *testing.T) {
 		{name: "missing header", wantStatus: http.StatusUnauthorized},
 		{name: "wrong scheme", header: "Basic token", wantStatus: http.StatusUnauthorized},
 		{name: "malformed bearer", header: "Bearer", wantStatus: http.StatusUnauthorized},
-		{name: "invalid token", header: "Bearer invalid", validateError: ports.ErrInvalidToken, wantStatus: http.StatusUnauthorized},
-		{name: "expired token", header: "Bearer expired", validateError: ports.ErrInvalidToken, wantStatus: http.StatusUnauthorized},
+		{name: "invalid token", header: "Bearer invalid", validateError: domain.ErrInvalidToken, wantStatus: http.StatusUnauthorized},
+		{name: "expired token", header: "Bearer expired", validateError: domain.ErrInvalidToken, wantStatus: http.StatusUnauthorized},
 		{name: "empty subject", header: "Bearer token", claims: ports.TokenClaims{}, wantStatus: http.StatusUnauthorized},
 		{name: "valid token", header: "Bearer valid", claims: ports.TokenClaims{UserID: "user-id"}, wantStatus: http.StatusNoContent, wantCalled: true},
 	}

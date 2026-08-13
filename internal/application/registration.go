@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -14,40 +13,32 @@ import (
 type RegistrationService struct {
 	repository ports.UserRepository
 	hasher     ports.PasswordHasher
-	now        func() time.Time
 }
 
-func NewRegistrationService(repository ports.UserRepository, hasher ports.PasswordHasher, now func() time.Time) *RegistrationService {
-	if now == nil {
-		now = time.Now
-	}
-
-	return &RegistrationService{repository: repository, hasher: hasher, now: now}
+func NewRegistrationService(repository ports.UserRepository, hasher ports.PasswordHasher) *RegistrationService {
+	return &RegistrationService{repository: repository, hasher: hasher}
 }
 
-func (s *RegistrationService) Register(ctx context.Context, input dto.RegistrationInput) (dto.UserResult, error) {
-	input, err := ValidateRegistration(input)
-	if err != nil {
-		return dto.UserResult{}, err
+func (s *RegistrationService) Register(ctx context.Context, input dto.RegistrationInput) (dto.UserResponse, error) {
+	if err := input.Validate(); err != nil {
+		return dto.UserResponse{}, err
 	}
 
 	passwordHash, err := s.hasher.Hash(input.Password)
 	if err != nil {
-		return dto.UserResult{}, fmt.Errorf("hash registration password: %w", err)
+		return dto.UserResponse{}, fmt.Errorf("hash registration password: %w", err)
 	}
 
+	now := time.Now().UTC()
 	user, err := s.repository.Create(ctx, domain.User{
 		Name:         input.Name,
 		Email:        input.Email,
 		PasswordHash: passwordHash,
-		CreatedAt:    s.now().UTC(),
+		CreatedAt:    now,
 	})
-	if errors.Is(err, ports.ErrEmailAlreadyExists) {
-		return dto.UserResult{}, ErrEmailAlreadyExists
-	}
 	if err != nil {
-		return dto.UserResult{}, fmt.Errorf("create user: %w", err)
+		return dto.UserResponse{}, fmt.Errorf("create user: %w", err)
 	}
 
-	return userResult(user), nil
+	return dto.NewUserResult(user), nil
 }

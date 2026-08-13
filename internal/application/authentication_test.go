@@ -13,25 +13,37 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestAuthenticationServiceAuthenticate(t *testing.T) {
+func TestAuthenticationServiceLogin(t *testing.T) {
 	controller := gomock.NewController(t)
 	repository := mocks.NewMockUserRepository(controller)
 	hasher := mocks.NewMockPasswordHasher(controller)
 	tokens := mocks.NewMockTokenService(controller)
-	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
 	user := domain.User{ID: "user-id", Email: "ada@example.com", PasswordHash: "hashed-password"}
 
-	repository.EXPECT().GetByEmail(gomock.Any(), user.Email).Return(user, nil)
+	repository.EXPECT().GetByEmail(gomock.Any(), " ADA@Example.COM ").Return(user, nil)
 	hasher.EXPECT().Compare(user.PasswordHash, "plain-password").Return(nil)
-	tokens.EXPECT().Generate(ports.TokenClaims{UserID: user.ID, ExpiresAt: now.Add(time.Hour)}).Return("access-token", nil)
-	service := NewAuthenticationService(repository, hasher, tokens, time.Hour, func() time.Time { return now })
+	beforeLogin := time.Now()
+	tokens.EXPECT().Generate(gomock.Any()).DoAndReturn(
+		func(claims ports.TokenClaims) (string, error) {
+			if claims.UserID != user.ID {
+				t.Errorf("UserID = %q, want %q", claims.UserID, user.ID)
+			}
+			minimumExpiration := beforeLogin.Add(time.Hour)
+			maximumExpiration := time.Now().Add(time.Hour)
+			if claims.ExpiresAt.Before(minimumExpiration) || claims.ExpiresAt.After(maximumExpiration) {
+				t.Errorf("ExpiresAt = %s, want between %s and %s", claims.ExpiresAt, minimumExpiration, maximumExpiration)
+			}
+			return "access-token", nil
+		},
+	)
+	service := NewAuthenticationService(repository, hasher, tokens, time.Hour)
 
-	result, err := service.Authenticate(context.Background(), dto.LoginInput{
+	result, err := service.Login(context.Background(), dto.LoginInput{
 		Email:    " ADA@Example.COM ",
 		Password: "plain-password",
 	})
 	if err != nil {
-		t.Fatalf("Authenticate() error = %v", err)
+		t.Fatalf("Login() error = %v", err)
 	}
 	if result.AccessToken != "access-token" || result.ExpiresIn != time.Hour {
 		t.Errorf("result = %#v", result)
@@ -44,8 +56,8 @@ func TestAuthenticationServiceCredentialFailuresAreEquivalent(t *testing.T) {
 		findError    error
 		compareError error
 	}{
-		{name: "unknown email", findError: ports.ErrUserNotFound},
-		{name: "wrong password", compareError: ports.ErrInvalidCredentials},
+		{name: "unknown email", findError: domain.ErrUserNotFound},
+		{name: "wrong password", compareError: domain.ErrInvalidCredentials},
 	}
 
 	for _, test := range tests {
@@ -60,10 +72,10 @@ func TestAuthenticationServiceCredentialFailuresAreEquivalent(t *testing.T) {
 			if test.findError == nil {
 				hasher.EXPECT().Compare(user.PasswordHash, "password").Return(test.compareError)
 			}
-			service := NewAuthenticationService(repository, hasher, tokens, time.Hour, time.Now)
+			service := NewAuthenticationService(repository, hasher, tokens, time.Hour)
 
-			if _, err := service.Authenticate(context.Background(), dto.LoginInput{Email: "user@example.com", Password: "password"}); !errors.Is(err, ErrInvalidCredentials) {
-				t.Errorf("Authenticate() error = %v, want ErrInvalidCredentials", err)
+			if _, err := service.Login(context.Background(), dto.LoginInput{Email: "user@example.com", Password: "password"}); !errors.Is(err, domain.ErrInvalidCredentials) {
+				t.Errorf("Login() error = %v, want ErrInvalidCredentials", err)
 			}
 		})
 	}
@@ -76,7 +88,6 @@ func TestAuthenticationServiceRejectsBlankCredentialsBeforeDependencies(t *testi
 		mocks.NewMockPasswordHasher(controller),
 		mocks.NewMockTokenService(controller),
 		time.Hour,
-		nil,
 	)
 
 	tests := []dto.LoginInput{
@@ -85,8 +96,8 @@ func TestAuthenticationServiceRejectsBlankCredentialsBeforeDependencies(t *testi
 		{Email: "user@example.com", Password: "  "},
 	}
 	for _, input := range tests {
-		if _, err := service.Authenticate(context.Background(), input); !errors.Is(err, ErrInvalidCredentials) {
-			t.Errorf("Authenticate(%#v) error = %v", input, err)
+		if _, err := service.Login(context.Background(), input); !errors.Is(err, domain.ErrInvalidCredentials) {
+			t.Errorf("Login(%#v) error = %v", input, err)
 		}
 	}
 }
@@ -123,10 +134,10 @@ func TestAuthenticationServicePropagatesInternalErrors(t *testing.T) {
 			if test.findError == nil && test.compareError == nil {
 				tokens.EXPECT().Generate(gomock.Any()).Return("token", test.tokenError)
 			}
-			service := NewAuthenticationService(repository, hasher, tokens, time.Hour, time.Now)
+			service := NewAuthenticationService(repository, hasher, tokens, time.Hour)
 
-			if _, err := service.Authenticate(context.Background(), dto.LoginInput{Email: "user@example.com", Password: "password"}); !errors.Is(err, test.want) {
-				t.Errorf("Authenticate() error = %v, want %v", err, test.want)
+			if _, err := service.Login(context.Background(), dto.LoginInput{Email: "user@example.com", Password: "password"}); !errors.Is(err, test.want) {
+				t.Errorf("Login() error = %v, want %v", err, test.want)
 			}
 		})
 	}

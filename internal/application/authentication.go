@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 )
 
@@ -16,7 +16,6 @@ type AuthenticationService struct {
 	hasher     ports.PasswordHasher
 	tokens     ports.TokenService
 	tokenTTL   time.Duration
-	now        func() time.Time
 }
 
 func NewAuthenticationService(
@@ -24,48 +23,42 @@ func NewAuthenticationService(
 	hasher ports.PasswordHasher,
 	tokens ports.TokenService,
 	tokenTTL time.Duration,
-	now func() time.Time,
 ) *AuthenticationService {
-	if now == nil {
-		now = time.Now
-	}
-
 	return &AuthenticationService{
 		repository: repository,
 		hasher:     hasher,
 		tokens:     tokens,
 		tokenTTL:   tokenTTL,
-		now:        now,
 	}
 }
 
-func (s *AuthenticationService) Authenticate(ctx context.Context, input dto.LoginInput) (dto.AuthenticationResult, error) {
-	email := normalizeEmail(input.Email)
-	if email == "" || strings.TrimSpace(input.Password) == "" {
-		return dto.AuthenticationResult{}, ErrInvalidCredentials
+func (s *AuthenticationService) Login(ctx context.Context, input dto.LoginInput) (dto.LoginResponse, error) {
+	if err := input.Validate(); err != nil {
+		return dto.LoginResponse{}, domain.ErrInvalidCredentials
 	}
 
-	user, err := s.repository.GetByEmail(ctx, email)
-	if errors.Is(err, ports.ErrUserNotFound) {
-		return dto.AuthenticationResult{}, ErrInvalidCredentials
+	user, err := s.repository.GetByEmail(ctx, input.Email)
+	if errors.Is(err, domain.ErrUserNotFound) {
+		return dto.LoginResponse{}, domain.ErrInvalidCredentials
 	}
 	if err != nil {
-		return dto.AuthenticationResult{}, fmt.Errorf("get user for authentication: %w", err)
+		return dto.LoginResponse{}, fmt.Errorf("get user for authentication: %w", err)
 	}
 
-	if err := s.hasher.Compare(user.PasswordHash, input.Password); errors.Is(err, ports.ErrInvalidCredentials) {
-		return dto.AuthenticationResult{}, ErrInvalidCredentials
+	if err := s.hasher.Compare(user.PasswordHash, input.Password); errors.Is(err, domain.ErrInvalidCredentials) {
+		return dto.LoginResponse{}, domain.ErrInvalidCredentials
 	} else if err != nil {
-		return dto.AuthenticationResult{}, fmt.Errorf("compare authentication password: %w", err)
+		return dto.LoginResponse{}, fmt.Errorf("compare authentication password: %w", err)
 	}
 
+	now := time.Now()
 	token, err := s.tokens.Generate(ports.TokenClaims{
 		UserID:    user.ID,
-		ExpiresAt: s.now().Add(s.tokenTTL),
+		ExpiresAt: now.Add(s.tokenTTL),
 	})
 	if err != nil {
-		return dto.AuthenticationResult{}, fmt.Errorf("generate authentication token: %w", err)
+		return dto.LoginResponse{}, fmt.Errorf("generate authentication token: %w", err)
 	}
 
-	return dto.AuthenticationResult{AccessToken: token, ExpiresIn: s.tokenTTL}, nil
+	return dto.LoginResponse{AccessToken: token, ExpiresIn: s.tokenTTL}, nil
 }

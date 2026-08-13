@@ -31,6 +31,7 @@ mocks:
 	go tool mockgen -destination=internal/mocks/mock_token_service.go -package=mocks -write_package_comment=false -write_source_comment=false github.com/Noraluk/backend-challenge-7solutions/internal/ports TokenService
 	go tool mockgen -destination=internal/mocks/mock_registration_usecase.go -package=mocks -write_package_comment=false -write_source_comment=false github.com/Noraluk/backend-challenge-7solutions/internal/ports RegistrationUseCase
 	go tool mockgen -destination=internal/mocks/mock_authentication_usecase.go -package=mocks -write_package_comment=false -write_source_comment=false github.com/Noraluk/backend-challenge-7solutions/internal/ports AuthenticationUseCase
+	go tool mockgen -destination=internal/mocks/mock_user_usecase.go -package=mocks -write_package_comment=false -write_source_comment=false github.com/Noraluk/backend-challenge-7solutions/internal/ports UserUseCase
 	go tool mockgen -source=internal/adapters/mongodb/user_repository.go -destination=internal/mocks/mock_user_collection.go -package=mocks -mock_names=userCollection=MockUserCollection -write_package_comment=false -write_source_comment=false
 	gofmt -w internal/mocks
 

@@ -1,8 +1,9 @@
 package httpapi
 
 import (
-	"fmt"
 	"net/http"
+
+	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/handlers"
 )
 
 type RouteGroup interface {
@@ -11,16 +12,10 @@ type RouteGroup interface {
 
 func NewHandler(groups ...RouteGroup) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", health)
+	mux.HandleFunc("GET /health", handlers.Health)
 	for _, group := range groups {
 		group.Register(mux)
 	}
 
 	return mux
-}
-
-func health(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprintln(w, "ok")
 }

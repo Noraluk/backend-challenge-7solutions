@@ -7,6 +7,13 @@ import (
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 )
 
+type UserUseCase interface {
+	GetUser(context.Context, string) (dto.UserResponse, error)
+	ListUsers(context.Context) ([]dto.UserResponse, error)
+	UpdateUser(context.Context, dto.UpdateUserInput) (dto.UserResponse, error)
+	DeleteUser(context.Context, string) error
+}
+
 type UserRepository interface {
 	Create(ctx context.Context, user domain.User) (domain.User, error)
 	GetByID(ctx context.Context, id string) (domain.User, error)

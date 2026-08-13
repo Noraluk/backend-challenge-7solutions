@@ -11,7 +11,6 @@ import (
 	"github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/mocks"
-	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -55,7 +54,7 @@ func TestUserRepositoryCreate(t *testing.T) {
 	}
 }
 
-func TestUserRepositoryGetByEmailNormalizesFilter(t *testing.T) {
+func TestUserRepositoryGetByEmailUsesInputFilter(t *testing.T) {
 	controller := gomock.NewController(t)
 	collection := mocks.NewMockUserCollection(controller)
 	id := bson.NewObjectID()
@@ -68,11 +67,11 @@ func TestUserRepositoryGetByEmailNormalizesFilter(t *testing.T) {
 	)
 	repository := &UserRepository{collection: collection}
 
-	if _, err := repository.GetByEmail(context.Background(), " ADA@Example.COM "); err != nil {
+	if _, err := repository.GetByEmail(context.Background(), "ADA@Example.COM"); err != nil {
 		t.Fatalf("GetByEmail() error = %v", err)
 	}
 
-	wantFilter := bson.D{{Key: "email", Value: "ada@example.com"}}
+	wantFilter := bson.D{{Key: "email", Value: "ADA@Example.COM"}}
 	if !reflect.DeepEqual(gotFilter, wantFilter) {
 		t.Errorf("filter = %#v, want %#v", gotFilter, wantFilter)
 	}
@@ -148,13 +147,13 @@ func TestUserRepositoryUpdateUsesExplicitFields(t *testing.T) {
 	collection := mocks.NewMockUserCollection(controller)
 	id := bson.NewObjectID()
 	name := "Grace Hopper"
-	email := " GRACE@Example.COM "
+	email := "GRACE@Example.COM"
 	var gotUpdate any
 	collection.EXPECT().FindOneAndUpdate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, _ any, update any, _ ...options.Lister[options.FindOneAndUpdateOptions]) *mongo.SingleResult {
 			gotUpdate = update
 			return mongo.NewSingleResultFromDocument(model.UserDocument{
-				ID: id, Name: name, Email: "grace@example.com",
+				ID: id, Name: name, Email: email,
 			}, nil, nil)
 		},
 	)
@@ -167,13 +166,13 @@ func TestUserRepositoryUpdateUsesExplicitFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
-	if user.Email != "grace@example.com" {
-		t.Errorf("Email = %q, want normalized email", user.Email)
+	if user.Email != email {
+		t.Errorf("Email = %q, want %q", user.Email, email)
 	}
 
 	wantUpdate := bson.D{{Key: "$set", Value: bson.D{
 		{Key: "name", Value: name},
-		{Key: "email", Value: "grace@example.com"},
+		{Key: "email", Value: email},
 	}}}
 	if !reflect.DeepEqual(gotUpdate, wantUpdate) {
 		t.Errorf("update = %#v, want %#v", gotUpdate, wantUpdate)
@@ -196,13 +195,13 @@ func TestUserRepositoryMapsDuplicateEmailOnCreateAndUpdate(t *testing.T) {
 	)
 	repository := &UserRepository{collection: collection}
 
-	if _, err := repository.Create(context.Background(), domain.User{Email: "ada@example.com"}); !errors.Is(err, ports.ErrEmailAlreadyExists) {
+	if _, err := repository.Create(context.Background(), domain.User{Email: "ada@example.com"}); !errors.Is(err, domain.ErrEmailAlreadyExists) {
 		t.Errorf("Create() error = %v, want ErrEmailAlreadyExists", err)
 	}
 
 	id := bson.NewObjectID().Hex()
 	email := "ada@example.com"
-	if _, err := repository.Update(context.Background(), id, dto.UpdateUserInput{Email: &email}); !errors.Is(err, ports.ErrEmailAlreadyExists) {
+	if _, err := repository.Update(context.Background(), id, dto.UpdateUserInput{Email: &email}); !errors.Is(err, domain.ErrEmailAlreadyExists) {
 		t.Errorf("Update() error = %v, want ErrEmailAlreadyExists", err)
 	}
 }
@@ -211,18 +210,18 @@ func TestUserRepositoryRejectsInvalidIDAndEmptyUpdate(t *testing.T) {
 	controller := gomock.NewController(t)
 	repository := &UserRepository{collection: mocks.NewMockUserCollection(controller)}
 
-	if _, err := repository.GetByID(context.Background(), "invalid"); !errors.Is(err, ports.ErrInvalidUserID) {
-		t.Errorf("GetByID() error = %v, want ErrInvalidUserID", err)
+	if _, err := repository.GetByID(context.Background(), "invalid"); err == nil {
+		t.Error("GetByID() error = nil")
 	}
-	if _, err := repository.Create(context.Background(), domain.User{ID: "invalid"}); !errors.Is(err, ports.ErrInvalidUserID) {
+	if _, err := repository.Create(context.Background(), domain.User{ID: "invalid"}); !errors.Is(err, domain.ErrInvalidUserID) {
 		t.Errorf("Create() error = %v, want ErrInvalidUserID", err)
 	}
-	if err := repository.Delete(context.Background(), "invalid"); !errors.Is(err, ports.ErrInvalidUserID) {
-		t.Errorf("Delete() error = %v, want ErrInvalidUserID", err)
+	if err := repository.Delete(context.Background(), "invalid"); err == nil {
+		t.Error("Delete() error = nil")
 	}
 
 	id := bson.NewObjectID().Hex()
-	if _, err := repository.Update(context.Background(), id, dto.UpdateUserInput{}); !errors.Is(err, ports.ErrInvalidUpdate) {
+	if _, err := repository.Update(context.Background(), id, dto.UpdateUserInput{}); !errors.Is(err, domain.ErrInvalidUpdate) {
 		t.Errorf("Update() error = %v, want ErrInvalidUpdate", err)
 	}
 }
@@ -267,8 +266,8 @@ func TestUserRepositoryUpdateNameOnlyAndInvalidID(t *testing.T) {
 	if _, err := repository.Update(context.Background(), id.Hex(), dto.UpdateUserInput{Name: &name}); err != nil {
 		t.Errorf("Update() error = %v", err)
 	}
-	if _, err := repository.Update(context.Background(), "invalid", dto.UpdateUserInput{Name: &name}); !errors.Is(err, ports.ErrInvalidUserID) {
-		t.Errorf("Update() error = %v, want ErrInvalidUserID", err)
+	if _, err := repository.Update(context.Background(), "invalid", dto.UpdateUserInput{Name: &name}); err == nil {
+		t.Error("Update() error = nil")
 	}
 }
 
@@ -326,7 +325,7 @@ func TestUserRepositoryDeleteAndCount(t *testing.T) {
 	)
 	repository := &UserRepository{collection: collection}
 
-	if err := repository.Delete(context.Background(), id); !errors.Is(err, ports.ErrUserNotFound) {
+	if err := repository.Delete(context.Background(), id); !errors.Is(err, domain.ErrUserNotFound) {
 		t.Errorf("Delete() error = %v, want ErrUserNotFound", err)
 	}
 	count, err := repository.Count(context.Background())
@@ -335,30 +334,5 @@ func TestUserRepositoryDeleteAndCount(t *testing.T) {
 	}
 	if count != 42 {
 		t.Errorf("Count() = %d, want 42", count)
-	}
-}
-
-func TestMapMongoError(t *testing.T) {
-	databaseError := errors.New("database unavailable")
-	tests := []struct {
-		name string
-		err  error
-		want error
-	}{
-		{name: "not found", err: mongo.ErrNoDocuments, want: ports.ErrUserNotFound},
-		{
-			name: "duplicate email",
-			err:  mongo.WriteException{WriteErrors: mongo.WriteErrors{{Code: 11000}}},
-			want: ports.ErrEmailAlreadyExists,
-		},
-		{name: "database error", err: databaseError, want: databaseError},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if err := mapMongoError(test.err); !errors.Is(err, test.want) {
-				t.Errorf("mapMongoError() = %v, want %v", err, test.want)
-			}
-		})
 	}
 }

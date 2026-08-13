@@ -1,11 +1,11 @@
-package httpapi
+package middleware
 
 import (
 	"context"
 	"net/http"
 	"strings"
 
-	httpdto "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/dto"
+	httperrors "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/errors"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/httpx"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 )
@@ -17,13 +17,13 @@ func RequireAuthentication(tokens ports.TokenService) func(http.Handler) http.Ha
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			parts := strings.Fields(r.Header.Get("Authorization"))
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] == "" {
-				httpx.WriteJSON(w, http.StatusUnauthorized, httpdto.ErrorResponse{Error: "unauthorized"})
+				httpx.WriteError(w, http.StatusUnauthorized, httperrors.CodeUnauthorized, httperrors.MessageUnauthorized)
 				return
 			}
 
 			claims, err := tokens.Validate(parts[1])
 			if err != nil || claims.UserID == "" {
-				httpx.WriteJSON(w, http.StatusUnauthorized, httpdto.ErrorResponse{Error: "unauthorized"})
+				httpx.WriteError(w, http.StatusUnauthorized, httperrors.CodeUnauthorized, httperrors.MessageUnauthorized)
 				return
 			}
 

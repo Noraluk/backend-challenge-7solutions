@@ -8,6 +8,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 )
 
 const (
@@ -17,14 +19,26 @@ const (
 )
 
 type Connection struct {
-	client *mongo.Client
-	users  *mongo.Collection
+	client     *mongo.Client
+	users      *mongo.Collection
+	disconnect func(context.Context) error
+}
+
+var createMongoClient = func(uri string) (*mongo.Client, error) {
+	return mongo.Connect(options.Client().ApplyURI(uri).SetServerSelectionTimeout(operationTimeout))
+}
+
+var pingMongoClient = func(ctx context.Context, client *mongo.Client) error {
+	return client.Ping(ctx, nil)
+}
+
+var createUserEmailIndex = func(ctx context.Context, users *mongo.Collection) error {
+	_, err := users.Indexes().CreateOne(ctx, userEmailIndexModel())
+	return err
 }
 
 func Connect(ctx context.Context, uri, databaseName string) (*Connection, error) {
-	client, err := mongo.Connect(
-		options.Client().ApplyURI(uri).SetServerSelectionTimeout(operationTimeout),
-	)
+	client, err := createMongoClient(uri)
 	if err != nil {
 		return nil, fmt.Errorf("create MongoDB client: %w", err)
 	}
@@ -32,26 +46,30 @@ func Connect(ctx context.Context, uri, databaseName string) (*Connection, error)
 	operationContext, cancel := context.WithTimeout(ctx, operationTimeout)
 	defer cancel()
 
-	if err := client.Ping(operationContext, nil); err != nil {
+	if err := pingMongoClient(operationContext, client); err != nil {
 		disconnectClient(client)
 		return nil, fmt.Errorf("ping MongoDB: %w", err)
 	}
 
 	users := client.Database(databaseName).Collection(usersCollectionName)
-	if _, err := users.Indexes().CreateOne(operationContext, userEmailIndexModel()); err != nil {
+	if err := createUserEmailIndex(operationContext, users); err != nil {
 		disconnectClient(client)
 		return nil, fmt.Errorf("create users email index: %w", err)
 	}
 
-	return &Connection{client: client, users: users}, nil
+	return &Connection{client: client, users: users, disconnect: client.Disconnect}, nil
 }
 
-func (c *Connection) UserRepository() *UserRepository {
+func (c *Connection) UserRepository() ports.UserRepository {
 	return NewUserRepository(c.users)
 }
 
 func (c *Connection) Disconnect(ctx context.Context) error {
-	if err := c.client.Disconnect(ctx); err != nil {
+	disconnect := c.disconnect
+	if disconnect == nil {
+		disconnect = c.client.Disconnect
+	}
+	if err := disconnect(ctx); err != nil {
 		return fmt.Errorf("disconnect MongoDB: %w", err)
 	}
 

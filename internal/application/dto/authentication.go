@@ -1,13 +1,22 @@
 package dto
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type LoginInput struct {
-	Email    string
-	Password string
+	Email    string `validate:"required"`
+	Password string `validate:"required"`
 }
 
-type AuthenticationResult struct {
+func (input LoginInput) Validate() error {
+	input.Email = strings.TrimSpace(input.Email)
+	input.Password = strings.TrimSpace(input.Password)
+	return validate.Struct(input)
+}
+
+type LoginResponse struct {
 	AccessToken string
 	ExpiresIn   time.Duration
 }

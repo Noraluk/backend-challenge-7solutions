@@ -10,8 +10,9 @@ import (
 	"time"
 
 	httpdto "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/dto"
-	"github.com/Noraluk/backend-challenge-7solutions/internal/application"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/handlers"
 	applicationdto "github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/mocks"
 	"go.uber.org/mock/gomock"
 )
@@ -27,12 +28,12 @@ func TestRegisterUser(t *testing.T) {
 	registration := mocks.NewMockRegistrationUseCase(controller)
 	createdAt := time.Date(2026, time.August, 12, 12, 0, 0, 0, time.UTC)
 	input := applicationdto.RegistrationInput{Name: "Ada", Email: "ada@example.com", Password: "password"}
-	registration.EXPECT().Register(gomock.Any(), input).Return(applicationdto.UserResult{
+	registration.EXPECT().Register(gomock.Any(), input).Return(applicationdto.UserResponse{
 		ID: "user-id", Name: input.Name, Email: input.Email, CreatedAt: createdAt,
 	}, nil)
 
 	response := httptest.NewRecorder()
-	authHandler(NewAuthRoutes(registration, nil)).ServeHTTP(response,
+	authHandler(NewAuthRoutes(handlers.NewAuthHandler(registration, nil))).ServeHTTP(response,
 		httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(`{"name":"Ada","email":"ada@example.com","password":"password"}`)),
 	)
 
@@ -42,7 +43,7 @@ func TestRegisterUser(t *testing.T) {
 	if strings.Contains(response.Body.String(), "password") {
 		t.Errorf("response exposes password: %s", response.Body)
 	}
-	var body httpdto.UserResponse
+	var body applicationdto.UserResponse
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -57,11 +58,12 @@ func TestRegisterUserErrors(t *testing.T) {
 		body       string
 		usecaseErr error
 		wantStatus int
+		wantCode   string
 	}{
-		{name: "malformed", body: `{"name":`, wantStatus: http.StatusBadRequest},
-		{name: "unknown field", body: `{"name":"Ada","email":"ada@example.com","password":"password","role":"admin"}`, wantStatus: http.StatusBadRequest},
-		{name: "duplicate", body: `{"name":"Ada","email":"ada@example.com","password":"password"}`, usecaseErr: application.ErrEmailAlreadyExists, wantStatus: http.StatusConflict},
-		{name: "internal", body: `{"name":"Ada","email":"ada@example.com","password":"password"}`, usecaseErr: errors.New("database failed"), wantStatus: http.StatusInternalServerError},
+		{name: "malformed", body: `{"name":`, wantStatus: http.StatusBadRequest, wantCode: "INVALID_REQUEST"},
+		{name: "unknown field", body: `{"name":"Ada","email":"ada@example.com","password":"password","role":"admin"}`, wantStatus: http.StatusBadRequest, wantCode: "INVALID_REQUEST"},
+		{name: "duplicate", body: `{"name":"Ada","email":"ada@example.com","password":"password"}`, usecaseErr: domain.ErrEmailAlreadyExists, wantStatus: http.StatusConflict, wantCode: "EMAIL_ALREADY_EXISTS"},
+		{name: "internal", body: `{"name":"Ada","email":"ada@example.com","password":"password"}`, usecaseErr: errors.New("database failed"), wantStatus: http.StatusInternalServerError, wantCode: "INTERNAL_ERROR"},
 	}
 
 	for _, test := range tests {
@@ -69,15 +71,13 @@ func TestRegisterUserErrors(t *testing.T) {
 			controller := gomock.NewController(t)
 			registration := mocks.NewMockRegistrationUseCase(controller)
 			if test.usecaseErr != nil {
-				registration.EXPECT().Register(gomock.Any(), gomock.Any()).Return(applicationdto.UserResult{}, test.usecaseErr)
+				registration.EXPECT().Register(gomock.Any(), gomock.Any()).Return(applicationdto.UserResponse{}, test.usecaseErr)
 			}
 			response := httptest.NewRecorder()
-			authHandler(NewAuthRoutes(registration, nil)).ServeHTTP(response,
+			authHandler(NewAuthRoutes(handlers.NewAuthHandler(registration, nil))).ServeHTTP(response,
 				httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(test.body)),
 			)
-			if response.Code != test.wantStatus {
-				t.Errorf("status = %d, want %d; body = %s", response.Code, test.wantStatus, response.Body)
-			}
+			assertAPIError(t, response, test.wantStatus, test.wantCode)
 		})
 	}
 }
@@ -86,12 +86,12 @@ func TestLogin(t *testing.T) {
 	controller := gomock.NewController(t)
 	authentication := mocks.NewMockAuthenticationUseCase(controller)
 	input := applicationdto.LoginInput{Email: "ada@example.com", Password: "password"}
-	authentication.EXPECT().Authenticate(gomock.Any(), input).Return(
-		applicationdto.AuthenticationResult{AccessToken: "signed-token", ExpiresIn: time.Hour}, nil,
+	authentication.EXPECT().Login(gomock.Any(), input).Return(
+		applicationdto.LoginResponse{AccessToken: "signed-token", ExpiresIn: time.Hour}, nil,
 	)
 
 	response := httptest.NewRecorder()
-	authHandler(NewAuthRoutes(nil, authentication)).ServeHTTP(response,
+	authHandler(NewAuthRoutes(handlers.NewAuthHandler(nil, authentication))).ServeHTTP(response,
 		httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(`{"email":"ada@example.com","password":"password"}`)),
 	)
 
@@ -113,10 +113,11 @@ func TestLoginErrors(t *testing.T) {
 		body       string
 		usecaseErr error
 		wantStatus int
+		wantCode   string
 	}{
-		{name: "malformed", body: `{"email":`, wantStatus: http.StatusBadRequest},
-		{name: "invalid credentials", body: `{"email":"ada@example.com","password":"wrong"}`, usecaseErr: application.ErrInvalidCredentials, wantStatus: http.StatusUnauthorized},
-		{name: "internal", body: `{"email":"ada@example.com","password":"password"}`, usecaseErr: errors.New("token failed"), wantStatus: http.StatusInternalServerError},
+		{name: "malformed", body: `{"email":`, wantStatus: http.StatusBadRequest, wantCode: "INVALID_REQUEST"},
+		{name: "invalid credentials", body: `{"email":"ada@example.com","password":"wrong"}`, usecaseErr: domain.ErrInvalidCredentials, wantStatus: http.StatusUnauthorized, wantCode: "INVALID_CREDENTIALS"},
+		{name: "internal", body: `{"email":"ada@example.com","password":"password"}`, usecaseErr: errors.New("token failed"), wantStatus: http.StatusInternalServerError, wantCode: "INTERNAL_ERROR"},
 	}
 
 	for _, test := range tests {
@@ -124,15 +125,13 @@ func TestLoginErrors(t *testing.T) {
 			controller := gomock.NewController(t)
 			authentication := mocks.NewMockAuthenticationUseCase(controller)
 			if test.usecaseErr != nil {
-				authentication.EXPECT().Authenticate(gomock.Any(), gomock.Any()).Return(applicationdto.AuthenticationResult{}, test.usecaseErr)
+				authentication.EXPECT().Login(gomock.Any(), gomock.Any()).Return(applicationdto.LoginResponse{}, test.usecaseErr)
 			}
 			response := httptest.NewRecorder()
-			authHandler(NewAuthRoutes(nil, authentication)).ServeHTTP(response,
+			authHandler(NewAuthRoutes(handlers.NewAuthHandler(nil, authentication))).ServeHTTP(response,
 				httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(test.body)),
 			)
-			if response.Code != test.wantStatus {
-				t.Errorf("status = %d, want %d; body = %s", response.Code, test.wantStatus, response.Body)
-			}
+			assertAPIError(t, response, test.wantStatus, test.wantCode)
 		})
 	}
 }

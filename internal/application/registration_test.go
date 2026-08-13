@@ -9,7 +9,6 @@ import (
 	"github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/mocks"
-	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/mock/gomock"
 )
@@ -18,7 +17,7 @@ func TestRegistrationServiceRegister(t *testing.T) {
 	controller := gomock.NewController(t)
 	repository := mocks.NewMockUserRepository(controller)
 	hasher := mocks.NewMockPasswordHasher(controller)
-	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.FixedZone("test", 7*60*60))
+	beforeRegister := time.Now().UTC()
 	var persisted domain.User
 
 	hasher.EXPECT().Hash("plain-password").Return("hashed-password", nil)
@@ -29,24 +28,25 @@ func TestRegistrationServiceRegister(t *testing.T) {
 			return user, nil
 		},
 	)
-	service := NewRegistrationService(repository, hasher, func() time.Time { return now })
+	service := NewRegistrationService(repository, hasher)
 
 	result, err := service.Register(context.Background(), dto.RegistrationInput{
 		Name:     " Ada Lovelace ",
-		Email:    " ADA@Example.COM ",
+		Email:    "ADA@Example.COM",
 		Password: "plain-password",
 	})
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
-	if persisted.Name != "Ada Lovelace" || persisted.Email != "ada@example.com" {
+	if persisted.Name != "Ada Lovelace" || persisted.Email != "ADA@Example.COM" {
 		t.Errorf("persisted user = %#v", persisted)
 	}
 	if persisted.PasswordHash != "hashed-password" {
 		t.Errorf("PasswordHash = %q, want hashed password", persisted.PasswordHash)
 	}
-	if !persisted.CreatedAt.Equal(now.UTC()) {
-		t.Errorf("CreatedAt = %s, want %s", persisted.CreatedAt, now.UTC())
+	afterRegister := time.Now().UTC()
+	if persisted.CreatedAt.Before(beforeRegister) || persisted.CreatedAt.After(afterRegister) {
+		t.Errorf("CreatedAt = %s, want between %s and %s", persisted.CreatedAt, beforeRegister, afterRegister)
 	}
 	if result.ID != "user-id" || result.Name != persisted.Name || result.Email != persisted.Email {
 		t.Errorf("result = %#v", result)
@@ -58,7 +58,6 @@ func TestRegistrationServiceRejectsValidationBeforeDependencies(t *testing.T) {
 	service := NewRegistrationService(
 		mocks.NewMockUserRepository(controller),
 		mocks.NewMockPasswordHasher(controller),
-		time.Now,
 	)
 
 	if _, err := service.Register(context.Background(), dto.RegistrationInput{}); err == nil {
@@ -68,18 +67,6 @@ func TestRegistrationServiceRejectsValidationBeforeDependencies(t *testing.T) {
 		if !errors.As(err, &validationErrors) {
 			t.Errorf("Register() error type = %T, want validator.ValidationErrors", err)
 		}
-	}
-}
-
-func TestRegistrationServiceUsesDefaultClock(t *testing.T) {
-	controller := gomock.NewController(t)
-	service := NewRegistrationService(
-		mocks.NewMockUserRepository(controller),
-		mocks.NewMockPasswordHasher(controller),
-		nil,
-	)
-	if service.now == nil {
-		t.Fatal("NewRegistrationService() did not set a default clock")
 	}
 }
 
@@ -95,7 +82,7 @@ func TestRegistrationServiceErrors(t *testing.T) {
 		want        error
 	}{
 		{name: "hash failure", hashError: hashingError, want: hashingError},
-		{name: "duplicate email", createError: ports.ErrEmailAlreadyExists, want: ErrEmailAlreadyExists},
+		{name: "duplicate email", createError: domain.ErrEmailAlreadyExists, want: domain.ErrEmailAlreadyExists},
 		{name: "repository failure", createError: repositoryError, want: repositoryError},
 	}
 
@@ -112,7 +99,7 @@ func TestRegistrationServiceErrors(t *testing.T) {
 					},
 				)
 			}
-			service := NewRegistrationService(repository, hasher, time.Now)
+			service := NewRegistrationService(repository, hasher)
 
 			if _, err := service.Register(context.Background(), validInput); !errors.Is(err, test.want) {
 				t.Errorf("Register() error = %v, want %v", err, test.want)

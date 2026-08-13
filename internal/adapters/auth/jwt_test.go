@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -71,7 +72,7 @@ func TestJWTServiceRejectsInvalidTokens(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := service.Validate(test.token); !errors.Is(err, ports.ErrInvalidToken) {
+			if _, err := service.Validate(test.token); !errors.Is(err, domain.ErrInvalidToken) {
 				t.Errorf("Validate() error = %v, want ErrInvalidToken", err)
 			}
 		})
@@ -109,7 +110,7 @@ func TestJWTServiceRejectsMissingRegisteredClaims(t *testing.T) {
 		if err != nil {
 			t.Fatalf("sign token: %v", err)
 		}
-		if _, err := service.Validate(token); !errors.Is(err, ports.ErrInvalidToken) {
+		if _, err := service.Validate(token); !errors.Is(err, domain.ErrInvalidToken) {
 			t.Errorf("Validate() error = %v, want ErrInvalidToken", err)
 		}
 	}

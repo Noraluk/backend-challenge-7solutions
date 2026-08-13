@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -13,8 +14,6 @@ type JWTService struct {
 	secret []byte
 	now    func() time.Time
 }
-
-var _ ports.TokenService = (*JWTService)(nil)
 
 func NewJWTService(secret string, now func() time.Time) *JWTService {
 	if now == nil {
@@ -53,7 +52,7 @@ func (s *JWTService) Validate(tokenString string) (ports.TokenClaims, error) {
 		claims,
 		func(token *jwt.Token) (any, error) {
 			if token.Method != jwt.SigningMethodHS256 {
-				return nil, ports.ErrInvalidToken
+				return nil, domain.ErrInvalidToken
 			}
 			return s.secret, nil
 		},
@@ -63,7 +62,7 @@ func (s *JWTService) Validate(tokenString string) (ports.TokenClaims, error) {
 		jwt.WithTimeFunc(s.now),
 	)
 	if err != nil || !token.Valid || claims.Subject == "" || claims.IssuedAt == nil || claims.ExpiresAt == nil {
-		return ports.TokenClaims{}, ports.ErrInvalidToken
+		return ports.TokenClaims{}, domain.ErrInvalidToken
 	}
 
 	return ports.TokenClaims{

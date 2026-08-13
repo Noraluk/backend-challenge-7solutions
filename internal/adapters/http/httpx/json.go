@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
 	httpdto "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/dto"
-	"github.com/Noraluk/backend-challenge-7solutions/internal/application"
+	httperrors "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/errors"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -41,15 +43,26 @@ func WriteJSON(w http.ResponseWriter, status int, body any) {
 func WriteApplicationError(w http.ResponseWriter, err error) {
 	var validationErrors validator.ValidationErrors
 	switch {
+	case errors.As(err, &validationErrors) && validationErrors[0].Field() == "ID":
+		WriteError(w, http.StatusBadRequest, httperrors.CodeInvalidUserID, httperrors.MessageInvalidUserID)
 	case errors.As(err, &validationErrors):
-		WriteJSON(w, http.StatusBadRequest, httpdto.ErrorResponse{Error: validationMessage(validationErrors[0])})
-	case errors.Is(err, application.ErrEmailAlreadyExists):
-		WriteJSON(w, http.StatusConflict, httpdto.ErrorResponse{Error: "email already exists"})
-	case errors.Is(err, application.ErrInvalidCredentials):
-		WriteJSON(w, http.StatusUnauthorized, httpdto.ErrorResponse{Error: "invalid credentials"})
+		WriteError(w, http.StatusBadRequest, httperrors.CodeValidation, validationMessage(validationErrors[0]))
+	case errors.Is(err, domain.ErrInvalidUserID):
+		WriteError(w, http.StatusBadRequest, httperrors.CodeInvalidUserID, httperrors.MessageInvalidUserID)
+	case errors.Is(err, domain.ErrEmailAlreadyExists):
+		WriteError(w, http.StatusConflict, httperrors.CodeEmailAlreadyExists, httperrors.MessageEmailAlreadyExists)
+	case errors.Is(err, domain.ErrInvalidCredentials):
+		WriteError(w, http.StatusUnauthorized, httperrors.CodeInvalidCredentials, httperrors.MessageInvalidCredentials)
+	case errors.Is(err, domain.ErrUserNotFound):
+		WriteError(w, http.StatusNotFound, httperrors.CodeUserNotFound, httperrors.MessageUserNotFound)
 	default:
-		WriteJSON(w, http.StatusInternalServerError, httpdto.ErrorResponse{Error: "internal server error"})
+		log.Printf("internal HTTP error: %v", err)
+		WriteError(w, http.StatusInternalServerError, httperrors.CodeInternal, httperrors.MessageInternal)
 	}
+}
+
+func WriteError(w http.ResponseWriter, status int, code, message string) {
+	WriteJSON(w, status, httpdto.ErrorResponse{Code: code, Message: message})
 }
 
 func validationMessage(err validator.FieldError) string {

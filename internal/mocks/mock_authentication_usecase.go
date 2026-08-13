@@ -39,17 +39,17 @@ func (m *MockAuthenticationUseCase) EXPECT() *MockAuthenticationUseCaseMockRecor
 	return m.recorder
 }
 
-// Authenticate mocks base method.
-func (m *MockAuthenticationUseCase) Authenticate(arg0 context.Context, arg1 dto.LoginInput) (dto.AuthenticationResult, error) {
+// Login mocks base method.
+func (m *MockAuthenticationUseCase) Login(arg0 context.Context, arg1 dto.LoginInput) (dto.LoginResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Authenticate", arg0, arg1)
-	ret0, _ := ret[0].(dto.AuthenticationResult)
+	ret := m.ctrl.Call(m, "Login", arg0, arg1)
+	ret0, _ := ret[0].(dto.LoginResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Authenticate indicates an expected call of Authenticate.
-func (mr *MockAuthenticationUseCaseMockRecorder) Authenticate(arg0, arg1 any) *gomock.Call {
+// Login indicates an expected call of Login.
+func (mr *MockAuthenticationUseCaseMockRecorder) Login(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authenticate", reflect.TypeOf((*MockAuthenticationUseCase)(nil).Authenticate), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Login", reflect.TypeOf((*MockAuthenticationUseCase)(nil).Login), arg0, arg1)
 }

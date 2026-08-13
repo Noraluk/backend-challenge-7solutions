@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
-	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -24,7 +23,7 @@ func NewUserDocument(user domain.User) (UserDocument, error) {
 		var err error
 		objectID, err = bson.ObjectIDFromHex(string(user.ID))
 		if err != nil {
-			return UserDocument{}, fmt.Errorf("%w: %q", ports.ErrInvalidUserID, user.ID)
+			return UserDocument{}, fmt.Errorf("%w: %q", domain.ErrInvalidUserID, user.ID)
 		}
 	}
 

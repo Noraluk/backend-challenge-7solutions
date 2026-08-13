@@ -4,15 +4,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type BcryptPasswordHasher struct {
 	cost int
 }
-
-var _ ports.PasswordHasher = (*BcryptPasswordHasher)(nil)
 
 func NewBcryptPasswordHasher() *BcryptPasswordHasher {
 	return &BcryptPasswordHasher{cost: bcrypt.DefaultCost}
@@ -33,7 +31,7 @@ func (h *BcryptPasswordHasher) Compare(passwordHash, password string) error {
 		return nil
 	}
 	if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-		return ports.ErrInvalidCredentials
+		return domain.ErrInvalidCredentials
 	}
 
 	return fmt.Errorf("compare password hash: %w", err)

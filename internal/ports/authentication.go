@@ -1,8 +1,19 @@
 package ports
 
 import (
+	"context"
 	"time"
+
+	"github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
 )
+
+type RegistrationUseCase interface {
+	Register(context.Context, dto.RegistrationInput) (dto.UserResponse, error)
+}
+
+type AuthenticationUseCase interface {
+	Login(context.Context, dto.LoginInput) (dto.LoginResponse, error)
+}
 
 type PasswordHasher interface {
 	Hash(password string) (string, error)

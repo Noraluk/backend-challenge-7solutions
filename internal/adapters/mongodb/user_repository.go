@@ -3,13 +3,10 @@ package mongodb
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 
 	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/mongodb/model"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/application/dto"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
-	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -28,8 +25,6 @@ type UserRepository struct {
 	collection userCollection
 }
 
-var _ ports.UserRepository = (*UserRepository)(nil)
-
 func NewUserRepository(collection *mongo.Collection) *UserRepository {
 	return &UserRepository{collection: collection}
 }
@@ -41,14 +36,17 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 	}
 
 	if _, err := r.collection.InsertOne(ctx, document); err != nil {
-		return domain.User{}, mapMongoError(err)
+		if mongo.IsDuplicateKeyError(err) {
+			return domain.User{}, domain.ErrEmailAlreadyExists
+		}
+		return domain.User{}, err
 	}
 
 	return document.DomainUser(), nil
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (domain.User, error) {
-	objectID, err := parseUserID(id)
+	objectID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
 		return domain.User{}, err
 	}
@@ -57,7 +55,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (domain.User, e
 }
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (domain.User, error) {
-	return decodeUser(r.collection.FindOne(ctx, bson.D{{Key: "email", Value: normalizeEmail(email)}}))
+	return decodeUser(r.collection.FindOne(ctx, bson.D{{Key: "email", Value: email}}))
 }
 
 func (r *UserRepository) List(ctx context.Context) ([]domain.User, error) {
@@ -87,7 +85,7 @@ func (r *UserRepository) List(ctx context.Context) ([]domain.User, error) {
 }
 
 func (r *UserRepository) Update(ctx context.Context, id string, update dto.UpdateUserInput) (domain.User, error) {
-	objectID, err := parseUserID(id)
+	objectID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
 		return domain.User{}, err
 	}
@@ -97,10 +95,10 @@ func (r *UserRepository) Update(ctx context.Context, id string, update dto.Updat
 		fields = append(fields, bson.E{Key: "name", Value: *update.Name})
 	}
 	if update.Email != nil {
-		fields = append(fields, bson.E{Key: "email", Value: normalizeEmail(*update.Email)})
+		fields = append(fields, bson.E{Key: "email", Value: *update.Email})
 	}
 	if len(fields) == 0 {
-		return domain.User{}, ports.ErrInvalidUpdate
+		return domain.User{}, domain.ErrInvalidUpdate
 	}
 
 	result := r.collection.FindOneAndUpdate(
@@ -114,7 +112,7 @@ func (r *UserRepository) Update(ctx context.Context, id string, update dto.Updat
 }
 
 func (r *UserRepository) Delete(ctx context.Context, id string) error {
-	objectID, err := parseUserID(id)
+	objectID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
 		return err
 	}
@@ -124,7 +122,7 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	if result.DeletedCount == 0 {
-		return ports.ErrUserNotFound
+		return domain.ErrUserNotFound
 	}
 
 	return nil
@@ -137,32 +135,14 @@ func (r *UserRepository) Count(ctx context.Context) (int64, error) {
 func decodeUser(result *mongo.SingleResult) (domain.User, error) {
 	var document model.UserDocument
 	if err := result.Decode(&document); err != nil {
-		return domain.User{}, mapMongoError(err)
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return domain.User{}, domain.ErrUserNotFound
+		}
+		if mongo.IsDuplicateKeyError(err) {
+			return domain.User{}, domain.ErrEmailAlreadyExists
+		}
+		return domain.User{}, err
 	}
 
 	return document.DomainUser(), nil
-}
-
-func parseUserID(id string) (bson.ObjectID, error) {
-	objectID, err := bson.ObjectIDFromHex(string(id))
-	if err != nil {
-		return bson.NilObjectID, fmt.Errorf("%w: %q", ports.ErrInvalidUserID, id)
-	}
-
-	return objectID, nil
-}
-
-func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
-
-func mapMongoError(err error) error {
-	switch {
-	case errors.Is(err, mongo.ErrNoDocuments):
-		return ports.ErrUserNotFound
-	case mongo.IsDuplicateKeyError(err):
-		return ports.ErrEmailAlreadyExists
-	default:
-		return err
-	}
 }

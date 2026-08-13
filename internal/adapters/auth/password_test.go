@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -23,7 +23,7 @@ func TestBcryptPasswordHasher(t *testing.T) {
 	if err := hasher.Compare(hash, "correct-password"); err != nil {
 		t.Errorf("Compare() correct password error = %v", err)
 	}
-	if err := hasher.Compare(hash, "wrong-password"); !errors.Is(err, ports.ErrInvalidCredentials) {
+	if err := hasher.Compare(hash, "wrong-password"); !errors.Is(err, domain.ErrInvalidCredentials) {
 		t.Errorf("Compare() wrong password error = %v, want ErrInvalidCredentials", err)
 	}
 }
@@ -31,7 +31,7 @@ func TestBcryptPasswordHasher(t *testing.T) {
 func TestBcryptPasswordHasherPropagatesInternalErrors(t *testing.T) {
 	hasher := NewBcryptPasswordHasher()
 
-	if err := hasher.Compare("not-a-bcrypt-hash", "password"); err == nil || errors.Is(err, ports.ErrInvalidCredentials) {
+	if err := hasher.Compare("not-a-bcrypt-hash", "password"); err == nil || errors.Is(err, domain.ErrInvalidCredentials) {
 		t.Errorf("Compare() error = %v, want internal hash error", err)
 	}
 	if _, err := hasher.Hash(string(make([]byte, 73))); err == nil {

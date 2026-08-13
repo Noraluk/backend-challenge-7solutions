@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -48,6 +49,53 @@ func TestConnectFailsWhenContextIsCanceled(t *testing.T) {
 	}
 }
 
+func TestConnect(t *testing.T) {
+	tests := []struct {
+		name        string
+		clientError error
+		pingError   error
+		indexError  error
+		wantError   string
+	}{
+		{name: "success"},
+		{name: "client error", clientError: errors.New("invalid URI"), wantError: "create MongoDB client"},
+		{name: "ping error", pingError: errors.New("unavailable"), wantError: "ping MongoDB"},
+		{name: "index error", indexError: errors.New("index failed"), wantError: "create users email index"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			restoreConnectionDependencies(t)
+			createMongoClient = func(string) (*mongo.Client, error) {
+				if test.clientError != nil {
+					return nil, test.clientError
+				}
+				client, err := mongo.Connect(options.Client().ApplyURI("mongodb://localhost:27017"))
+				if err == nil {
+					t.Cleanup(func() { _ = client.Disconnect(context.Background()) })
+				}
+				return client, err
+			}
+			pingMongoClient = func(context.Context, *mongo.Client) error { return test.pingError }
+			createUserEmailIndex = func(context.Context, *mongo.Collection) error { return test.indexError }
+
+			connection, err := Connect(context.Background(), "mongodb://localhost:27017", "test")
+			if test.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantError) {
+					t.Errorf("Connect() error = %v, want %q", err, test.wantError)
+				}
+				if connection != nil {
+					t.Errorf("Connect() = %#v, want nil", connection)
+				}
+				return
+			}
+			if err != nil || connection == nil || connection.users.Name() != usersCollectionName {
+				t.Errorf("Connect() = %#v, %v", connection, err)
+			}
+		})
+	}
+}
+
 func TestConnectionUserRepositoryAndDisconnect(t *testing.T) {
 	client, err := mongo.Connect(options.Client().ApplyURI("mongodb://localhost:27017"))
 	if err != nil {
@@ -57,10 +105,32 @@ func TestConnectionUserRepositoryAndDisconnect(t *testing.T) {
 	connection := &Connection{client: client, users: collection}
 
 	repository := connection.UserRepository()
-	if repository == nil || repository.collection != collection {
+	mongoRepository, ok := repository.(*UserRepository)
+	if !ok || mongoRepository.collection != collection {
 		t.Errorf("UserRepository() = %#v", repository)
 	}
 	if err := connection.Disconnect(context.Background()); err != nil {
 		t.Errorf("Disconnect() error = %v", err)
 	}
+}
+
+func TestConnectionDisconnectError(t *testing.T) {
+	want := errors.New("disconnect failed")
+	connection := &Connection{disconnect: func(context.Context) error { return want }}
+	err := connection.Disconnect(context.Background())
+	if !errors.Is(err, want) || !strings.Contains(err.Error(), "disconnect MongoDB") {
+		t.Errorf("Disconnect() error = %v", err)
+	}
+}
+
+func restoreConnectionDependencies(t *testing.T) {
+	t.Helper()
+	originalCreateMongoClient := createMongoClient
+	originalPingMongoClient := pingMongoClient
+	originalCreateUserEmailIndex := createUserEmailIndex
+	t.Cleanup(func() {
+		createMongoClient = originalCreateMongoClient
+		pingMongoClient = originalPingMongoClient
+		createUserEmailIndex = originalCreateUserEmailIndex
+	})
 }

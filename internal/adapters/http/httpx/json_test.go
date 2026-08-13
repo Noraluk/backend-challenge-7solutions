@@ -1,13 +1,15 @@
 package httpx
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/Noraluk/backend-challenge-7solutions/internal/application"
+	httpdto "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/dto"
+	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -70,31 +72,41 @@ func TestWriteApplicationError(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		err        error
-		wantStatus int
-		wantBody   string
+		name        string
+		err         error
+		wantStatus  int
+		wantCode    string
+		wantMessage string
 	}{
 		{name: "required", err: validationError(struct {
 			Name string `validate:"required"`
-		}{}), wantStatus: http.StatusBadRequest, wantBody: "name is required"},
+		}{}), wantStatus: http.StatusBadRequest, wantCode: "VALIDATION_ERROR", wantMessage: "name is required"},
 		{name: "invalid", err: validationError(struct {
 			Email string `validate:"email"`
-		}{Email: "invalid"}), wantStatus: http.StatusBadRequest, wantBody: "email is invalid"},
+		}{Email: "invalid"}), wantStatus: http.StatusBadRequest, wantCode: "VALIDATION_ERROR", wantMessage: "email is invalid"},
 		{name: "unsupported update", err: validationError(struct {
 			Fields map[string]string `validate:"dive,keys,oneof=name email,endkeys"`
-		}{Fields: map[string]string{"password": "value"}}), wantStatus: http.StatusBadRequest, wantBody: "update contains an unsupported field"},
-		{name: "duplicate", err: application.ErrEmailAlreadyExists, wantStatus: http.StatusConflict, wantBody: "email already exists"},
-		{name: "credentials", err: application.ErrInvalidCredentials, wantStatus: http.StatusUnauthorized, wantBody: "invalid credentials"},
-		{name: "internal", err: errors.New("database details"), wantStatus: http.StatusInternalServerError, wantBody: "internal server error"},
+		}{Fields: map[string]string{"password": "value"}}), wantStatus: http.StatusBadRequest, wantCode: "VALIDATION_ERROR", wantMessage: "update contains an unsupported field"},
+		{name: "invalid ID input", err: validationError(struct {
+			ID string `validate:"len=24,hexadecimal"`
+		}{ID: "invalid"}), wantStatus: http.StatusBadRequest, wantCode: "INVALID_USER_ID", wantMessage: "user ID is invalid"},
+		{name: "invalid ID", err: domain.ErrInvalidUserID, wantStatus: http.StatusBadRequest, wantCode: "INVALID_USER_ID", wantMessage: "user ID is invalid"},
+		{name: "duplicate", err: domain.ErrEmailAlreadyExists, wantStatus: http.StatusConflict, wantCode: "EMAIL_ALREADY_EXISTS", wantMessage: "email already exists"},
+		{name: "credentials", err: domain.ErrInvalidCredentials, wantStatus: http.StatusUnauthorized, wantCode: "INVALID_CREDENTIALS", wantMessage: "invalid credentials"},
+		{name: "not found", err: domain.ErrUserNotFound, wantStatus: http.StatusNotFound, wantCode: "USER_NOT_FOUND", wantMessage: "user not found"},
+		{name: "internal", err: errors.New("database details"), wantStatus: http.StatusInternalServerError, wantCode: "INTERNAL_ERROR", wantMessage: "internal server error"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			WriteApplicationError(response, test.err)
-			if response.Code != test.wantStatus || !strings.Contains(response.Body.String(), test.wantBody) {
-				t.Errorf("response = %d %q", response.Code, response.Body.String())
+			var body httpdto.ErrorResponse
+			if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.Code != test.wantStatus || body.Code != test.wantCode || body.Message != test.wantMessage {
+				t.Errorf("response = %d %#v", response.Code, body)
 			}
 		})
 	}
