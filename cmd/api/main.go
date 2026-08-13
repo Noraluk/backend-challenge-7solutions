@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/auth"
@@ -18,7 +22,10 @@ import (
 	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
 )
 
-const disconnectTimeout = 10 * time.Second
+const (
+	shutdownTimeout   = 10 * time.Second
+	disconnectTimeout = 10 * time.Second
+)
 
 type databaseConnection interface {
 	UserRepository() ports.UserRepository
@@ -35,32 +42,35 @@ var connectDatabase = func(ctx context.Context, uri, databaseName string) (datab
 	return connection, nil
 }
 
-var serveHTTP = http.ListenAndServe
-
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	if err := run(ctx); err != nil {
+		stop()
+		log.Print(err)
+		os.Exit(1)
 	}
+	stop()
 }
 
-func run() error {
+func run(ctx context.Context) error {
 	config, err := loadConfiguration()
 	if err != nil {
 		return fmt.Errorf("configuration error: %w", err)
 	}
-	database, err := connectDatabase(context.Background(), config.MongoURI, config.MongoDatabase)
+	database, err := connectDatabase(ctx, config.MongoURI, config.MongoDatabase)
 	if err != nil {
 		return fmt.Errorf("MongoDB startup error: %w", err)
 	}
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), disconnectTimeout)
+		disconnectContext, cancel := context.WithTimeout(context.Background(), disconnectTimeout)
 		defer cancel()
-		if err := database.Disconnect(ctx); err != nil {
+		if err := database.Disconnect(disconnectContext); err != nil {
 			log.Printf("MongoDB shutdown error: %v", err)
 		}
 	}()
+
 	repository := database.UserRepository()
-	workerContext, stopWorker := context.WithCancel(context.Background())
+	workerContext, stopWorker := context.WithCancel(ctx)
 	workerStopped := make(chan struct{})
 	go func() {
 		application.RunUserCountWorker(workerContext, repository, slog.Default())
@@ -85,8 +95,27 @@ func run() error {
 		httproutes.NewAuthRoutes(authHandler),
 		httproutes.NewUserRoutes(userHandler, tokenService),
 	)
-	if err := serveHTTP(address, handler); err != nil {
-		return fmt.Errorf("API server failed: %w", err)
+	server := &http.Server{Addr: address, Handler: handler}
+	serverStopped := make(chan error, 1)
+	go func() {
+		serverStopped <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverStopped:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("API server failed: %w", err)
+		}
+		return nil
+	case <-ctx.Done():
+		log.Print("API server shutting down")
+	}
+
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancelShutdown()
+	if err := server.Shutdown(shutdownContext); err != nil {
+		_ = server.Close()
+		return fmt.Errorf("HTTP shutdown error: %w", err)
 	}
 	return nil
 }
