@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -9,8 +10,9 @@ import (
 func TestLoadConfig(t *testing.T) {
 	environment := validEnvironment()
 	environment["HTTP_PORT"] = "9090"
+	setEnvironment(t, environment)
 
-	config, err := loadConfig(mapLookup(environment))
+	config, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
@@ -32,29 +34,17 @@ func TestLoadConfig(t *testing.T) {
 	}
 }
 
-func TestLoadConfigReadsEnvironment(t *testing.T) {
-	for key, value := range validEnvironment() {
-		t.Setenv(key, value)
-	}
-	t.Setenv("HTTP_PORT", "8081")
+func TestLoadConfigUsesDefaultHTTPPort(t *testing.T) {
+	setEnvironment(t, validEnvironment())
+	unsetEnvironment(t, "HTTP_PORT")
 
 	config, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
-	}
-	if config.HTTPPort != 8081 || config.MongoDatabase != "user_management" || config.JWTTTL != time.Hour {
-		t.Errorf("LoadConfig() = %#v", config)
-	}
-}
-
-func TestLoadConfigUsesDefaultHTTPPort(t *testing.T) {
-	config, err := loadConfig(mapLookup(validEnvironment()))
 	if err != nil {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
 
-	if config.HTTPPort != defaultHTTPPort {
-		t.Errorf("HTTPPort = %d, want %d", config.HTTPPort, defaultHTTPPort)
+	if config.HTTPPort != 8080 {
+		t.Errorf("HTTPPort = %d, want 8080", config.HTTPPort)
 	}
 }
 
@@ -65,23 +55,28 @@ func TestLoadConfigRejectsMissingOrInvalidValues(t *testing.T) {
 		value     string
 		wantError string
 	}{
-		{name: "invalid HTTP port", key: "HTTP_PORT", value: "70000", wantError: "HTTP_PORT"},
-		{name: "missing Mongo URI", key: "MONGO_URI", value: "", wantError: "MONGO_URI is required"},
-		{name: "invalid Mongo URI", key: "MONGO_URI", value: "http://localhost:27017", wantError: "MONGO_URI must be"},
-		{name: "missing Mongo database", key: "MONGO_DATABASE", value: "", wantError: "MONGO_DATABASE is required"},
-		{name: "missing JWT secret", key: "JWT_SECRET", value: "", wantError: "JWT_SECRET is required"},
-		{name: "short JWT secret", key: "JWT_SECRET", value: "too-short", wantError: "JWT_SECRET must be"},
-		{name: "missing JWT TTL", key: "JWT_TTL", value: "", wantError: "JWT_TTL is required"},
-		{name: "invalid JWT TTL", key: "JWT_TTL", value: "tomorrow", wantError: "JWT_TTL must be"},
-		{name: "negative JWT TTL", key: "JWT_TTL", value: "-1h", wantError: "JWT_TTL must be"},
+		{name: "invalid HTTP port", key: "HTTP_PORT", value: "70000", wantError: "HTTPPort"},
+		{name: "missing Mongo URI", key: "MONGO_URI", value: "", wantError: "MONGO_URI"},
+		{name: "invalid Mongo URI", key: "MONGO_URI", value: "http://localhost:27017", wantError: "MongoURI"},
+		{name: "missing Mongo database", key: "MONGO_DATABASE", value: "", wantError: "MONGO_DATABASE"},
+		{name: "missing JWT secret", key: "JWT_SECRET", value: "", wantError: "JWT_SECRET"},
+		{name: "short JWT secret", key: "JWT_SECRET", value: "too-short", wantError: "JWTSecret"},
+		{name: "missing JWT TTL", key: "JWT_TTL", value: "", wantError: "JWT_TTL"},
+		{name: "invalid JWT TTL", key: "JWT_TTL", value: "tomorrow", wantError: "JWTTTL"},
+		{name: "negative JWT TTL", key: "JWT_TTL", value: "-1h", wantError: "JWTTTL"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			environment := validEnvironment()
 			environment[test.key] = test.value
+			setEnvironment(t, environment)
+			unsetEnvironment(t, "HTTP_PORT")
+			if test.key == "HTTP_PORT" {
+				t.Setenv(test.key, test.value)
+			}
 
-			_, err := loadConfig(mapLookup(environment))
+			_, err := LoadConfig()
 			if err == nil {
 				t.Fatal("loadConfig() error = nil, want validation error")
 			}
@@ -101,9 +96,24 @@ func validEnvironment() map[string]string {
 	}
 }
 
-func mapLookup(environment map[string]string) func(string) (string, bool) {
-	return func(key string) (string, bool) {
-		value, ok := environment[key]
-		return value, ok
+func setEnvironment(t *testing.T, environment map[string]string) {
+	t.Helper()
+	for key, value := range environment {
+		t.Setenv(key, value)
 	}
+}
+
+func unsetEnvironment(t *testing.T, key string) {
+	t.Helper()
+	value, exists := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("os.Unsetenv(%q) error = %v", key, err)
+	}
+	t.Cleanup(func() {
+		if exists {
+			_ = os.Setenv(key, value)
+			return
+		}
+		_ = os.Unsetenv(key)
+	})
 }

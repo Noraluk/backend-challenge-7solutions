@@ -1,0 +1,21 @@
+root = "."
+tmp_dir = "tmp/air"
+
+[build]
+cmd = "go build -o ./tmp/air/api ./cmd/api"
+entrypoint = ["./tmp/air/api"]
+include_ext = ["go", "mod", "sum"]
+exclude_dir = [".git", "bin", "tmp"]
+exclude_unchanged = true
+delay = 300
+stop_on_error = true
+send_interrupt = true
+kill_delay = "500ms"
+poll = true
+poll_interval = 500
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true

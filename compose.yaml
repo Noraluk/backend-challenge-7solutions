@@ -3,10 +3,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: development
     env_file:
       - .env
     ports:
       - "${HTTP_PORT:-8080}:8080"
+    volumes:
+      - .:/app
+      - go_modules:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
     depends_on:
       mongodb:
         condition: service_healthy
@@ -42,6 +47,8 @@ services:
 
 volumes:
   mongodb_data:
+  go_modules:
+  go_build_cache:
 
 networks:
   backend:

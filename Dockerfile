@@ -1,3 +1,14 @@
+FROM cosmtrek/air:v1.67.3 AS development
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+CMD ["-c", ".air.toml"]
+
 FROM golang:1.24-alpine3.22 AS build
 
 WORKDIR /src
