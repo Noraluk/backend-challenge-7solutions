@@ -17,6 +17,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY cmd ./cmd
+COPY gen ./gen
 COPY internal ./internal
 
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
@@ -30,6 +31,6 @@ RUN apk add --no-cache ca-certificates \
 COPY --from=build --chown=app:app /out/api /usr/local/bin/api
 
 USER app
-EXPOSE 8080
+EXPOSE 8080 9090
 
 ENTRYPOINT ["/usr/local/bin/api"]

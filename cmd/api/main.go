@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	userv1 "github.com/Noraluk/backend-challenge-7solutions/gen/user/v1"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/adapters/auth"
+	grpcapi "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/grpc"
 	httpapi "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http"
 	httphandlers "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/handlers"
 	httproutes "github.com/Noraluk/backend-challenge-7solutions/internal/adapters/http/routes"
@@ -20,6 +23,7 @@ import (
 	"github.com/Noraluk/backend-challenge-7solutions/internal/application"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/platform"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/ports"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -88,6 +92,19 @@ func run(ctx context.Context) error {
 	userService := application.NewUserService(repository)
 	authHandler := httphandlers.NewAuthHandler(registrationService, authenticationService)
 	userHandler := httphandlers.NewUserHandler(userService)
+	grpcAddress := fmt.Sprintf(":%d", config.GRPCPort)
+	grpcListener, err := net.Listen("tcp", grpcAddress)
+	if err != nil {
+		return fmt.Errorf("gRPC startup error: %w", err)
+	}
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcapi.RequireAuthentication(tokenService)))
+	userv1.RegisterUserServiceServer(grpcServer, grpcapi.NewUserServer(registrationService, userService))
+	defer grpcServer.Stop()
+	grpcStopped := make(chan error, 1)
+	go func() {
+		grpcStopped <- grpcServer.Serve(grpcListener)
+	}()
+	log.Printf("gRPC server listening on %s", grpcAddress)
 
 	address := fmt.Sprintf(":%d", config.HTTPPort)
 	log.Printf("API server listening on %s", address)
@@ -107,10 +124,16 @@ func run(ctx context.Context) error {
 			return fmt.Errorf("API server failed: %w", err)
 		}
 		return nil
+	case err := <-grpcStopped:
+		if err != nil {
+			return fmt.Errorf("gRPC server failed: %w", err)
+		}
+		return nil
 	case <-ctx.Done():
-		log.Print("API server shutting down")
+		log.Print("servers shutting down")
 	}
 
+	grpcServer.GracefulStop()
 	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancelShutdown()
 	if err := server.Shutdown(shutdownContext); err != nil {

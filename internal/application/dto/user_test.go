@@ -142,6 +142,24 @@ func TestNewUserResult(t *testing.T) {
 	}
 }
 
+func TestUserResponseToProto(t *testing.T) {
+	createdAt := time.Date(2026, time.August, 13, 10, 30, 0, 0, time.UTC)
+	user := UserResponse{
+		ID:        "507f1f77bcf86cd799439011",
+		Name:      "Ada",
+		Email:     "ada@example.com",
+		CreatedAt: createdAt,
+	}
+
+	result := user.ToProto()
+	if result.GetId() != user.ID || result.GetName() != user.Name || result.GetEmail() != user.Email {
+		t.Errorf("ToProto() = %v", result)
+	}
+	if !result.GetCreatedAt().AsTime().Equal(createdAt) {
+		t.Errorf("ToProto() created_at = %v, want %v", result.GetCreatedAt(), createdAt)
+	}
+}
+
 func assertValidationError(t *testing.T, err error, field, code string) {
 	t.Helper()
 	if err == nil {

@@ -2,13 +2,16 @@ SHELL := /bin/sh
 
 BINARY ?= bin/api
 COMPOSE ?= docker compose
+BUF_VERSION ?= v1.65.0
 
-.PHONY: help fmt mocks tidy test test-race vet build run check compose-config compose-up compose-down compose-reset
+.PHONY: help fmt mocks proto proto-generate tidy test test-race vet build run check compose-config compose-up compose-down compose-reset
 
 help:
 	@printf '%s\n' \
 		'fmt             Format Go source files' \
 		'mocks           Generate gomock implementations with mockgen' \
+		'proto           Validate Protobuf contracts' \
+		'proto-generate  Validate contracts and generate Go code' \
 		'tidy            Synchronize Go module dependencies' \
 		'test            Run unit tests' \
 		'test-race       Run unit tests with the race detector' \
@@ -22,7 +25,7 @@ help:
 		'compose-reset   Stop the local stack and remove its data'
 
 fmt:
-	gofmt -w $$(find cmd internal -type f -name '*.go')
+	gofmt -w $$(find cmd gen internal -type f -name '*.go')
 
 mocks:
 	mkdir -p internal/mocks
@@ -34,6 +37,13 @@ mocks:
 	go tool mockgen -destination=internal/mocks/mock_user_usecase.go -package=mocks -write_package_comment=false -write_source_comment=false github.com/Noraluk/backend-challenge-7solutions/internal/ports UserUseCase
 	go tool mockgen -source=internal/adapters/mongodb/user_repository.go -destination=internal/mocks/mock_user_collection.go -package=mocks -mock_names=userCollection=MockUserCollection -write_package_comment=false -write_source_comment=false
 	gofmt -w internal/mocks
+
+proto:
+	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) lint
+	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) build
+
+proto-generate: proto
+	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) generate
 
 tidy:
 	go mod tidy

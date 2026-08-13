@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	HTTPPort      uint16        `env:"HTTP_PORT" envDefault:"8080" validate:"gt=0"`
+	GRPCPort      uint16        `env:"GRPC_PORT" envDefault:"9090" validate:"gt=0"`
 	MongoURI      string        `env:"MONGO_URI,notEmpty" validate:"url,startswith=mongodb://|startswith=mongodb+srv://"`
 	MongoDatabase string        `env:"MONGO_DATABASE,notEmpty"`
 	JWTSecret     string        `env:"JWT_SECRET,notEmpty" validate:"min=32"`

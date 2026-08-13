@@ -4,8 +4,10 @@ import (
 	"strings"
 	"time"
 
+	userv1 "github.com/Noraluk/backend-challenge-7solutions/gen/user/v1"
 	"github.com/Noraluk/backend-challenge-7solutions/internal/domain"
 	"github.com/go-playground/validator/v10"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var validate = validator.New(validator.WithRequiredStructEnabled())
@@ -46,6 +48,15 @@ type UserResponse struct {
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+func (user UserResponse) ToProto() *userv1.User {
+	return &userv1.User{
+		Id:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		CreatedAt: timestamppb.New(user.CreatedAt),
+	}
 }
 
 func NewUserResult(user domain.User) UserResponse {

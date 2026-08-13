@@ -10,6 +10,7 @@ import (
 func TestLoadConfig(t *testing.T) {
 	environment := validEnvironment()
 	environment["HTTP_PORT"] = "9090"
+	environment["GRPC_PORT"] = "9091"
 	setEnvironment(t, environment)
 
 	config, err := LoadConfig()
@@ -19,6 +20,9 @@ func TestLoadConfig(t *testing.T) {
 
 	if config.HTTPPort != 9090 {
 		t.Errorf("HTTPPort = %d, want 9090", config.HTTPPort)
+	}
+	if config.GRPCPort != 9091 {
+		t.Errorf("GRPCPort = %d, want 9091", config.GRPCPort)
 	}
 	if config.MongoURI != environment["MONGO_URI"] {
 		t.Errorf("MongoURI = %q, want %q", config.MongoURI, environment["MONGO_URI"])
@@ -34,9 +38,10 @@ func TestLoadConfig(t *testing.T) {
 	}
 }
 
-func TestLoadConfigUsesDefaultHTTPPort(t *testing.T) {
+func TestLoadConfigUsesDefaultPorts(t *testing.T) {
 	setEnvironment(t, validEnvironment())
 	unsetEnvironment(t, "HTTP_PORT")
+	unsetEnvironment(t, "GRPC_PORT")
 
 	config, err := LoadConfig()
 	if err != nil {
@@ -45,6 +50,9 @@ func TestLoadConfigUsesDefaultHTTPPort(t *testing.T) {
 
 	if config.HTTPPort != 8080 {
 		t.Errorf("HTTPPort = %d, want 8080", config.HTTPPort)
+	}
+	if config.GRPCPort != 9090 {
+		t.Errorf("GRPCPort = %d, want 9090", config.GRPCPort)
 	}
 }
 
@@ -56,6 +64,7 @@ func TestLoadConfigRejectsMissingOrInvalidValues(t *testing.T) {
 		wantError string
 	}{
 		{name: "invalid HTTP port", key: "HTTP_PORT", value: "70000", wantError: "HTTPPort"},
+		{name: "invalid gRPC port", key: "GRPC_PORT", value: "70000", wantError: "GRPCPort"},
 		{name: "missing Mongo URI", key: "MONGO_URI", value: "", wantError: "MONGO_URI"},
 		{name: "invalid Mongo URI", key: "MONGO_URI", value: "http://localhost:27017", wantError: "MongoURI"},
 		{name: "missing Mongo database", key: "MONGO_DATABASE", value: "", wantError: "MONGO_DATABASE"},
@@ -72,7 +81,11 @@ func TestLoadConfigRejectsMissingOrInvalidValues(t *testing.T) {
 			environment[test.key] = test.value
 			setEnvironment(t, environment)
 			unsetEnvironment(t, "HTTP_PORT")
+			unsetEnvironment(t, "GRPC_PORT")
 			if test.key == "HTTP_PORT" {
+				t.Setenv(test.key, test.value)
+			}
+			if test.key == "GRPC_PORT" {
 				t.Setenv(test.key, test.value)
 			}
 
