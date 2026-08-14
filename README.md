@@ -433,7 +433,7 @@ The Makefile is a thin wrapper around the listed tools:
 | `make test-race` | Run tests with race detection | `go test -race ./...` |
 | `make vet` | Run static analysis | `go vet ./...` |
 | `make check` | Run format check, tests, race detection, vet, and build | The commands above plus `go build ./cmd/api` |
-| `make docker-up` | Build and start Docker services in the background | `docker compose up -d --build` |
+| `make docker-up` | Build and start Docker services in the foreground | `docker compose up --build` |
 | `make docker-down` | Stop Docker services and preserve data | `docker compose down` |
 | `make proto` | Lint and validate protobuf contracts | `go run github.com/bufbuild/buf/cmd/buf@v1.65.0 lint` and `build` |
 | `make proto-generate` | Validate and generate protobuf bindings | `go run github.com/bufbuild/buf/cmd/buf@v1.65.0 generate` |
